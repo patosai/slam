@@ -6,20 +6,24 @@ import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 
-# Initiate STAR detector
+from src import eight_point_algorithm
+
+# Initiate ORB detector
 orb = cv2.ORB_create()
+
+
 def compute_orb(img):
-    # find the keypoints with ORB
+    """find the keypoints with ORB"""
     kp = orb.detect(img, None)
     # compute the descriptors with ORB
     kp, des = orb.compute(img, kp)
     return kp, des
 
+
 img1 = cv2.imread("data/highway1.jpg")
 img2 = cv2.imread("data/highway2.jpg")
 
 # find points of interest in points
-
 img1_kp, img1_des = compute_orb(img1)
 img2_kp, img2_des = compute_orb(img2)
 
@@ -34,14 +38,21 @@ if False:
 bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
 # TODO not all the matches here are good
 matches = bf.match(img1_des, img2_des)
-img3 = cv2.drawMatches(img1,img1_kp,img2,img2_kp,matches,None,flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
-if True:
+# matches is of type DMatch and have the properties:
+# - DMatch.distance - Distance between descriptors. The lower, the better it is.
+# - DMatch.trainIdx - Index of the descriptor in train descriptors
+# - DMatch.queryIdx - Index of the descriptor in query descriptors
+# - DMatch.imgIdx - Index of the train image.
+matches = sorted(matches, key = (lambda x: x.distance))
+
+if False:
+    matches_to_draw = matches[:20]
+    img3 = cv2.drawMatches(img1,img1_kp,img2,img2_kp,matches_to_draw,None,flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
     plt.imshow(img3)
     plt.show()
 
-matched_points_img1 = np.asarray([img1_kp[match.queryIdx].pt for match in matches])
-matched_points_img2 = np.asarray([img2_kp[match.trainIdx].pt for match in matches])
-essential_matrix, mask = cv2.findEssentialMat(matched_points_img1, matched_points_img2)
-
-points, rotation, translation, mask = cv2.recoverPose(essential_matrix, matched_points_img1, matched_points_img2)
-# translation is a unit vector of length 1, X pointing to right, Y pointing into image, and Z pointing upwards
+selected_matches = matches[:8]
+matched_points = [[[img1_kp[match.trainIdx].pt[1], img1_kp[match.trainIdx].pt[0]],
+                   [img2_kp[match.queryIdx].pt[1], img2_kp[match.queryIdx].pt[0]]]
+                  for match in selected_matches]
+eight_point_algorithm.calculate_essential_matrix(matched_points)
