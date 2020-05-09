@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
 import cv2
-import numpy as np
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
+import numpy as np
 
 from src import eight_point_algorithm
 
@@ -20,8 +20,8 @@ def compute_orb(img):
     return kp, des
 
 
-img1 = cv2.imread("data/highway1.jpg")
-img2 = cv2.imread("data/highway2.jpg")
+img1 = cv2.imread("data/img1.png")
+img2 = cv2.imread("data/img2.png")
 
 # find points of interest in points
 img1_kp, img1_des = compute_orb(img1)
@@ -45,14 +45,17 @@ matches = bf.match(img1_des, img2_des)
 # - DMatch.imgIdx - Index of the train image.
 matches = sorted(matches, key = (lambda x: x.distance))
 
-if False:
-    matches_to_draw = matches[:20]
+if True:
+    matches_to_draw = matches
     img3 = cv2.drawMatches(img1,img1_kp,img2,img2_kp,matches_to_draw,None,flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
     plt.imshow(img3)
     plt.show()
 
-selected_matches = matches[:8]
+selected_matches = matches
 matched_points = [[[img1_kp[match.trainIdx].pt[1], img1_kp[match.trainIdx].pt[0]],
                    [img2_kp[match.queryIdx].pt[1], img2_kp[match.queryIdx].pt[0]]]
                   for match in selected_matches]
-eight_point_algorithm.calculate_essential_matrix(matched_points)
+E = eight_point_algorithm.calculate_essential_matrix(matched_points)
+print(E)
+singular_values = np.linalg.svd(E, compute_uv=False)
+print(singular_values)
