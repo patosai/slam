@@ -15,11 +15,17 @@ def essential_matrix_to_rotation_translation(essential_matrix, matched_points):
     # translation X points right, Y points down, Z points into the image
     possible_translations = [u[:, -1], -1*u[:, -1]]
 
+    winning_num_points = 0
+    winning_rotation = None
+    winning_translation = None
     for rotation in possible_rotations:
         for translation in possible_translations:
-            point_a = matched_points[0][0]
-            #print([point_a; 1] - translation)
+            points = [np.asarray([point_set[0][0], point_set[0][1], 1]) for point_set in matched_points]
+            points_in_front_of_camera = [(rotation[-1] @ (translation - point) > 0) for point in points]
+            num_points_in_front_of_camera = sum(points_in_front_of_camera)
+            if num_points_in_front_of_camera > winning_num_points:
+                winning_rotation = rotation
+                winning_translation = translation
+                winning_num_points = num_points_in_front_of_camera
 
-
-    # TODO need to test points to determine the correct solution out of the four
-    return rotation, translation
+    return winning_rotation, winning_translation
