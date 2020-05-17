@@ -32,7 +32,8 @@ def calculate_fundamental_matrix(matched_points):
     u, s, v = np.linalg.svd(C)
     # if 8 points given, select the left singular vector associated with the 0 singular value
     # otherwise, select the one associated with the minimum singular value
-    idx_to_select = 8 if len(matched_points) == 8 else np.argmin(s)
+    idx_to_select = -1 if len(matched_points) == 8 else np.argmin(s)
     estimated_f = u[:, idx_to_select]
     estimated_f = estimated_f.reshape((3, 3))
+
     return estimated_f

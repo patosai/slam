@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+import sys
+sys.path.append("./lib")
+import pypangolin
+
 import cv2
 import matplotlib
 matplotlib.use('TkAgg')
@@ -99,17 +103,8 @@ if False:
 
 essential_matrix = np.transpose(intrinsic_camera_matrix) @ fundamental_matrix @ intrinsic_camera_matrix
 rotation, translation = essential.essential_matrix_to_rotation_translation(essential_matrix, matched_points)
-print("rotation: ", rotation)
+print("rotation")
+print(rotation)
+print("det: ", np.linalg.det(rotation))
 print("camera vector after: ", rotation @ np.asarray([0, 0, 1]))
 print("translation: ", translation)
-
-
-pts1 = np.asarray([[img1_kp[match.trainIdx].pt[1], img1_kp[match.trainIdx].pt[0]] for match in selected_matches])
-pts2 = np.asarray([[img2_kp[match.trainIdx].pt[1], img2_kp[match.trainIdx].pt[0]] for match in selected_matches])
-E, _ = cv2.findEssentialMat(pts1, pts2, intrinsic_camera_matrix)
-_, R, t, _, triangulated_points = cv2.recoverPose(E, pts1, pts2, intrinsic_camera_matrix, distanceThresh=50)
-print("------")
-print("what opencv thinks")
-print("rotation: ", R)
-print("camera vector after: ", R @ np.asarray([0, 0, 1]))
-print("translation: ", t)
