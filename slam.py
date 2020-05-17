@@ -10,7 +10,7 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import numpy as np
 
-from src import eight_point_algorithm, essential
+from src import fundamental, essential, opencv
 
 # Initiate ORB detector
 orb = cv2.ORB_create()
@@ -29,6 +29,7 @@ img2 = cv2.imread("data/road2.jpg")
 intrinsic_camera_matrix = np.asarray([[9.842439e+02, 0.000000e+00, 6.900000e+02],
                                       [0.000000e+00, 9.808141e+02, 2.331966e+02],
                                       [0.000000e+00, 0.000000e+00, 1.000000e+00]])
+image_size = [img1.shape[1], img1.shape[0]]
 
 # find points of interest in points
 img1_kp, img1_des = compute_orb(img1)
@@ -53,7 +54,7 @@ matches = bf.match(img1_des, img2_des)
 matches = sorted(matches, key = (lambda x: x.distance))
 selected_matches = [match for match in matches if match.distance < 32]
 
-if False:
+if True:
     matches_to_draw = selected_matches
     img3 = cv2.drawMatches(img1,img1_kp,img2,img2_kp,matches_to_draw,None,flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
     plt.imshow(img3)
@@ -63,7 +64,7 @@ if False:
 matched_points = np.asarray([[[img1_kp[match.trainIdx].pt[1], img1_kp[match.trainIdx].pt[0]],
                               [img2_kp[match.queryIdx].pt[1], img2_kp[match.queryIdx].pt[0]]]
                              for match in selected_matches])
-fundamental_matrix = eight_point_algorithm.calculate_fundamental_matrix(matched_points)
+fundamental_matrix = fundamental.calculate_fundamental_matrix(matched_points)
 
 if False:
     matches_to_draw = selected_matches[:8]
@@ -101,10 +102,22 @@ if False:
 
     plt.show()
 
-essential_matrix = np.transpose(intrinsic_camera_matrix) @ fundamental_matrix @ intrinsic_camera_matrix
+essential_matrix = fundamental.fundamental_to_essential_matrix(fundamental_matrix, intrinsic_camera_matrix)
 rotation, translation = essential.essential_matrix_to_rotation_translation(essential_matrix, matched_points)
-print("rotation")
-print(rotation)
-print("det: ", np.linalg.det(rotation))
 print("camera vector after: ", rotation @ np.asarray([0, 0, 1]))
 print("translation: ", translation)
+
+print("my fundamental matrix")
+print(fundamental_matrix)
+
+print("\n\n")
+
+R, t, _ = opencv.pose_and_points_from_matches(matches, img1_kp, img2_kp, intrinsic_camera_matrix)
+print("their camera vector")
+print(R @ np.asarray([0, 0, 1]))
+print("their translation")
+print(t)
+print("their fundamental matrix")
+opencv_fundamental = opencv.find_fundamental_mat(selected_matches, img1_kp, img2_kp)
+print(opencv_fundamental)
+
