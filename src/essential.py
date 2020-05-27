@@ -1,8 +1,10 @@
 import numpy as np
 
+from . import plot, util
+
 
 def essential_matrix_to_rotation_translation(essential_matrix, matched_points):
-    "given an essential matrix, calculates the translation vector (normalized) and the rotation matrix"
+    """given an essential matrix, calculates the translation vector (normalized) and the rotation matrix"""
     u, s, v = np.linalg.svd(essential_matrix)
     # http://igt.ip.uca.fr/~ab/Classes/DIKU-3DCV2/Handouts/Lecture16.pdf
     w = np.asarray([[0, -1, 0],
@@ -20,9 +22,19 @@ def essential_matrix_to_rotation_translation(essential_matrix, matched_points):
     winning_translation = None
     for rotation in possible_rotations:
         for translation in possible_translations:
-            points = [np.asarray([point_set[0][0], point_set[0][1], 1]) for point_set in matched_points]
-            points_in_front_of_camera = [(rotation[-1] @ (translation - point) > 0) for point in points]
-            num_points_in_front_of_camera = sum(points_in_front_of_camera)
+            camera_vector = rotation @ np.asarray([0, 0, 1])
+            position = translation
+            num_points_in_front_of_camera = 0
+            for point_set in matched_points:
+                first_point = util.pixel_to_camera_coords(point_set[0])
+                vector_to_point = first_point - position
+                camera_in_same_direction = np.dot(vector_to_point, camera_vector) >= 0
+                if camera_in_same_direction:
+                    num_points_in_front_of_camera = num_points_in_front_of_camera + 1
+                else:
+                    num_points_in_front_of_camera = -1
+                    break
+
             if num_points_in_front_of_camera > winning_num_points:
                 winning_rotation = rotation
                 winning_translation = translation
