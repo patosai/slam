@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
 
-import sys
-sys.path.append("./lib")
-import pangolin
 import OpenGL.GL as gl
 
 import cv2
@@ -11,7 +8,7 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import numpy as np
 
-from src import fundamental, essential, opencv, plot
+from src import display, fundamental, essential, opencv, plot
 
 # Initiate ORB detector
 orb = cv2.ORB_create()
@@ -109,8 +106,6 @@ print("translation: ", translation)
 print("my fundamental matrix")
 print(fundamental_matrix)
 
-#plot.plot_vectors([camera_vector, [0, 0, 1]])
-
 print("\n\n")
 
 R, t, _ = opencv.pose_and_points_from_matches(matches, img1_kp, img2_kp, intrinsic_camera_matrix)
@@ -124,36 +119,23 @@ print("their fundamental matrix")
 opencv_fundamental = opencv.find_fundamental_mat(selected_matches, img1_kp, img2_kp)
 print(opencv_fundamental)
 
-pangolin.CreateWindowAndBind('Main', 640, 480)
-gl.glEnable(gl.GL_DEPTH_TEST)
 
-# Define Projection and initial ModelView matrix
-scam = pangolin.OpenGlRenderState(
-    pangolin.ProjectionMatrix(640, 480, 420, 420, 320, 240, 0.2, 100),
-    pangolin.ModelViewLookAt(-2, 2, -2, 0, 0, 0, pangolin.AxisDirection.AxisY))
-handler = pangolin.Handler3D(scam)
+display.setup_pangolin()
 
-# Create Interactive View in window
-dcam = pangolin.CreateDisplay()
-dcam.SetBounds(0.0, 1.0, 0.0, 1.0, -640.0/480.0)
-dcam.SetHandler(handler)
-
-while not pangolin.ShouldQuit():
-    gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
-    gl.glClearColor(1.0, 1.0, 1.0, 1.0)
-    dcam.Activate(scam)
+while not display.should_quit():
+    display.init_frame()
 
     # Draw Point Cloud
     points = np.random.random((100000, 3)) * 10
     gl.glPointSize(2)
     gl.glColor3f(1.0, 0.0, 0.0)
-    pangolin.DrawPoints(points)
+    display.draw_points(points)
 
     # Draw camera
     pose = np.identity(4)
     pose[:3, 3] = np.random.randn(3)
     gl.glLineWidth(1)
     gl.glColor3f(0.0, 0.0, 1.0)
-    pangolin.DrawCamera(pose, 0.5, 0.75, 0.8)
+    display.draw_camera(pose, 0.5, 0.75, 0.8)
 
-    pangolin.FinishFrame()
+    display.finish_frame()
