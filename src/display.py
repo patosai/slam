@@ -1,6 +1,7 @@
 import sys
 sys.path.append("./lib")
 import pangolin
+import numpy as np
 import OpenGL.GL as gl
 
 
@@ -30,17 +31,25 @@ def should_quit():
 
 
 def draw_points(points):
+    gl.glPointSize(2)
+    gl.glColor3f(1.0, 0.0, 0.0)
     pangolin.DrawPoints(points)
 
 
-def draw_camera(pose, x, y, z):
-    pangolin.DrawCamera(pose, x, y, z)
+def draw_camera(pose, color=(0.0, 1.0, 0.0)):
+    width = 0.2
+    height_ratio = 0.75
+    z_ratio = 0.8
+    gl.glLineWidth(1)
+    gl.glColor3f(color[0], color[1], color[2])
+    homogenous_pose = np.vstack((pose, [0, 0, 0, 1]))
+    pangolin.DrawCamera(homogenous_pose, width, height_ratio, z_ratio)
 
 
 def init_frame():
-    global dcam
+    global dcam, scam
     gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
-    gl.glClearColor(1.0, 1.0, 1.0, 1.0)
+    gl.glClearColor(0.0, 0.0, 0.0, 1.0)
     dcam.Activate(scam)
 
 

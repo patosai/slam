@@ -8,7 +8,7 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import numpy as np
 
-from src import display, fundamental, essential, opencv, plot
+from src import display, fundamental, essential, plot
 
 # Initiate ORB detector
 orb = cv2.ORB_create()
@@ -20,6 +20,10 @@ def compute_orb(img):
     # compute the descriptors with ORB
     kp, des = orb.compute(img, kp)
     return kp, des
+
+
+def find_initial_position(img1, img2):
+    """takes the first two images and finds the relative locations of the cameras"""
 
 
 img1 = cv2.imread("data/road1.jpg")
@@ -49,15 +53,15 @@ matches = bf.match(img1_des, img2_des)
 matches = sorted(matches, key = (lambda x: x.distance))
 selected_matches = [match for match in matches if match.distance < 32]
 
-if False:
+if True:
     matches_to_draw = selected_matches
     img3 = cv2.drawMatches(img1,img1_kp,img2,img2_kp,matches_to_draw,None,flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
     plt.imshow(img3)
     plt.show()
 
 # opencv images store y coord first, then x coord
-matched_points = np.asarray([[[img1_kp[match.trainIdx].pt[1], img1_kp[match.trainIdx].pt[0]],
-                              [img2_kp[match.queryIdx].pt[1], img2_kp[match.queryIdx].pt[0]]]
+matched_points = np.asarray([[np.float32(img1_kp[match.trainIdx].pt),
+                              np.float32(img2_kp[match.queryIdx].pt)]
                              for match in selected_matches])
 fundamental_matrix = fundamental.calculate_fundamental_matrix(matched_points)
 
@@ -65,7 +69,7 @@ if False:
     matches_to_draw = selected_matches[:8]
 
     # draw epipolar lines on left image
-    line_equations = [np.asarray([img2_kp[match.queryIdx].pt[1], img2_kp[match.queryIdx].pt[0], 1]) @ fundamental_matrix
+    line_equations = [np.hstack(np.float32(img2_kp[match.queryIdx].pt), [1]) @ fundamental_matrix
                       for match in matches_to_draw]
     left_img = img1.copy()
     for a, b, c in line_equations:
@@ -78,7 +82,7 @@ if False:
                  thickness=2)
 
     # draw epipolar lines on the right image
-    line_equations = [fundamental_matrix @ np.asarray([img1_kp[match.trainIdx].pt[1], img1_kp[match.trainIdx].pt[0], 1]).transpose()
+    line_equations = [fundamental_matrix @ np.hstack(np.float32(img2_kp[match.queryIdx].pt), [1]).transpose()
                       for match in matches_to_draw]
     right_img = img2.copy()
     for a, b, c in line_equations:
@@ -105,24 +109,9 @@ print("translation: ", translation)
 
 print("my fundamental matrix")
 print(fundamental_matrix)
-
-print("\n\n")
-
-R, t, _ = opencv.pose_and_points_from_matches(matches, img1_kp, img2_kp, intrinsic_camera_matrix)
-print("their rotation matrix")
-print(R)
-print("their camera vector")
-print(R @ np.asarray([0, 0, 1]))
-print("their translation")
-print(t)
-print("their fundamental matrix")
-opencv_fundamental = opencv.find_fundamental_mat(selected_matches, img1_kp, img2_kp)
-print(opencv_fundamental)
-
-
 display.setup_pangolin()
 
-while not display.should_quit():
+while False:#not display.should_quit():
     display.init_frame()
 
     # Draw Point Cloud
