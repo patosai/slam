@@ -49,7 +49,7 @@ def find_initial_position(img1, img2):
     good_matches = []
     pts1 = []
     pts2 = []
-    # ratio test as per Lowe's paper
+    # Lowe's ratio test
     for m, n in matches:
         if m.distance < 0.75*n.distance:
             good_matches.append(m)
