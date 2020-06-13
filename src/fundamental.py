@@ -32,12 +32,16 @@ def calculate_fundamental_matrix(img1_points, img2_points):
     # e C = [0, 0, 0, 0, 0, 0, 0, 0, 0]
     C = np.transpose(np.asarray([[b[0]*a[0], b[0]*a[1], b[0], b[1]*a[0], b[1]*a[1], b[1], a[0], a[1], 1] for a, b in zip(img1_points, img2_points)]))
     # singular value decomposition: C = USV
-    u, s, v = np.linalg.svd(C)
+    u, s, vh = np.linalg.svd(C)
     # if 8 points given, select the left singular vector associated with the 0 singular value
     # otherwise, select the one associated with the minimum singular value
     idx_to_select = -1 if len(img1_points) == 8 else np.argmin(s)
     estimated_f = u[:, idx_to_select]
     estimated_f = estimated_f.reshape((3, 3))
+
+    # enforce that F has two singular values that are 1, and the third is 0
+    u, s, vh = np.linalg.svd(estimated_f)
+    estimated_f = u @ np.diag([1, 1, 0]) @ vh
 
     normalized_estimated_f = estimated_f / np.linalg.norm(estimated_f)
 

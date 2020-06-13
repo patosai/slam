@@ -4,7 +4,7 @@ from . import plot, util
 
 
 def triangulate_points(rotation, translation, img1_points, img2_points, intrinsic_camera_matrix):
-    """Triangulate points, where rotation and translation are with respect to camera 1"""
+    """Triangulate points using linear least squares, where rotation and translation are with respect to camera 1"""
     # Given a rotation and translation between cameras, the projective matrix for each camera can be calculated
     # and used in a linear system of equations to triangulate all points in the two images.
     # Let M be the projective matrix for image 1, and M' the projective matrix for image 2.
@@ -46,7 +46,6 @@ def triangulate_points(rotation, translation, img1_points, img2_points, intrinsi
     return triangulated_points
 
 
-
 def essential_matrix_to_rotation_translation(essential_matrix, img1_points, img2_points, intrinsic_camera_matrix):
     """given an essential matrix, calculates the translation vector (normalized) and the rotation matrix"""
     u, s, v = np.linalg.svd(essential_matrix)
@@ -73,15 +72,29 @@ def essential_matrix_to_rotation_translation(essential_matrix, img1_points, img2
                                                      img2_points,
                                                      intrinsic_camera_matrix)
             camera_2_vector = rotation @ np.asarray([0, 0, 1])
+            print(triangulated_points)
+            print(camera_2_vector)
+            print(translation)
 
             points_in_front_of_camera_1 = triangulated_points[:, 2] > 0
             points_in_front_of_camera_2 = np.dot((triangulated_points - translation), camera_2_vector) > 0
             num_points_in_front_of_camera = np.count_nonzero(np.multiply(points_in_front_of_camera_1, points_in_front_of_camera_2))
+            print(num_points_in_front_of_camera)
+            print('----')
 
             if num_points_in_front_of_camera > winning_num_points:
                 winning_rotation = rotation
                 winning_translation = translation
                 winning_num_points = num_points_in_front_of_camera
                 winning_triangulated_points = triangulated_points
+
+    print("winning rotation")
+    print(winning_rotation)
+    print("winning translation")
+    print(winning_translation)
+    print("camera_vector")
+    print(winning_rotation @ np.asarray([0, 0, 1]))
+    print("num points in front: ", winning_num_points)
+    print("------")
 
     return winning_rotation, winning_translation, winning_triangulated_points
