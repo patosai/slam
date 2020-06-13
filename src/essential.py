@@ -3,7 +3,51 @@ import numpy as np
 from . import plot, util
 
 
-def essential_matrix_to_rotation_translation(essential_matrix, img1_points, img2_points):
+def triangulate_points(rotation, translation, img1_points, img2_points, intrinsic_camera_matrix):
+    """Triangulate points, where rotation and translation are with respect to camera 1"""
+    # Given a rotation and translation between cameras, the projective matrix for each camera can be calculated
+    # and used in a linear system of equations to triangulate all points in the two images.
+    # Let M be the projective matrix for image 1, and M' the projective matrix for image 2.
+    #
+    # Let p = [u which is the 2D projection of a point in image 1.
+    #          w
+    #          1]
+    # Let p' = [u' which is the 2D projection of a point in image 2.
+    #           w'
+    #           1]
+    # Let P = [X which is the 3D location of the point with a scale factor W.
+    #          Y
+    #          Z
+    #          W]
+    #
+    # p = MP
+    # p' = M'P
+    #
+    # From these two equations, P can be estimated.
+    # [u     [
+    #  v        M
+    #  1
+    #  u'  =         P
+    #  v'       M'
+    #  1]          ]
+    #
+    # An least-squares estimation can be calculated using numpy.linalg.lstsq
+
+    img1_projective_matrix = intrinsic_camera_matrix @ np.hstack((np.identity(3), np.zeros((3, 1))))
+    img2_projective_matrix = intrinsic_camera_matrix @ np.hstack((rotation, translation.reshape((3, 1))))
+    all_projective_matrices = np.vstack((img1_projective_matrix, img2_projective_matrix))
+    expected_values = np.hstack((img1_points, np.ones((len(img1_points), 1)), img2_points, np.ones((len(img2_points), 1)))).transpose()
+    projected_points, residuals, rank, singular_values = np.linalg.lstsq(all_projective_matrices, expected_values, rcond=-1)
+
+    triangulated_points = np.asarray([projected_points[0] / projected_points[3],
+                                      projected_points[1] / projected_points[3],
+                                      projected_points[1] / projected_points[3]]).transpose()
+
+    return triangulated_points
+
+
+
+def essential_matrix_to_rotation_translation(essential_matrix, img1_points, img2_points, intrinsic_camera_matrix):
     """given an essential matrix, calculates the translation vector (normalized) and the rotation matrix"""
     u, s, v = np.linalg.svd(essential_matrix)
     # http://igt.ip.uca.fr/~ab/Classes/DIKU-3DCV2/Handouts/Lecture16.pdf
@@ -20,34 +64,24 @@ def essential_matrix_to_rotation_translation(essential_matrix, img1_points, img2
     winning_num_points = 0
     winning_rotation = None
     winning_translation = None
+    winning_triangulated_points = None
     for rotation in possible_rotations:
         for translation in possible_translations:
-            # TODO
-            print("rotation")
-            print(rotation)
-            print("translation")
-            print(translation)
-            camera_vector = rotation @ np.asarray([0, 0, 1])
+            triangulated_points = triangulate_points(rotation,
+                                                     translation,
+                                                     img1_points,
+                                                     img2_points,
+                                                     intrinsic_camera_matrix)
+            camera_2_vector = rotation @ np.asarray([0, 0, 1])
 
-            print("camera vector")
-            print(camera_vector)
-            print("------")
-
-            position = translation
-            num_points_in_front_of_camera = 0
-            for img1_pt, img2_pt in zip(img1_points, img2_points):
-                first_point = util.pixel_to_camera_coords(img1_pt)
-                vector_to_point = first_point - position
-                camera_in_same_direction = np.dot(vector_to_point, camera_vector) >= 0
-                if camera_in_same_direction:
-                    num_points_in_front_of_camera = num_points_in_front_of_camera + 1
-                else:
-                    num_points_in_front_of_camera = -1
-                    break
+            points_in_front_of_camera_1 = triangulated_points[:, 2] > 0
+            points_in_front_of_camera_2 = np.dot((triangulated_points - translation), camera_2_vector) > 0
+            num_points_in_front_of_camera = np.count_nonzero(np.multiply(points_in_front_of_camera_1, points_in_front_of_camera_2))
 
             if num_points_in_front_of_camera > winning_num_points:
                 winning_rotation = rotation
                 winning_translation = translation
                 winning_num_points = num_points_in_front_of_camera
+                winning_triangulated_points = triangulated_points
 
-    return winning_rotation, winning_translation
+    return winning_rotation, winning_translation, winning_triangulated_points

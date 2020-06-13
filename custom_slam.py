@@ -85,7 +85,11 @@ def find_initial_position(img1, img2):
     fundamental_matrix = img2_transform_matrix.transpose() @ fundamental_matrix @ img1_transform_matrix
 
     essential_matrix = fundamental.fundamental_to_essential_matrix(fundamental_matrix, intrinsic_camera_matrix)
-    rotation, translation = essential.essential_matrix_to_rotation_translation(essential_matrix, good_img1_points, good_img2_points)
+    rotation, translation, triangulated_points = essential.essential_matrix_to_rotation_translation(essential_matrix,
+                                                                                                    good_img1_points,
+                                                                                                    good_img2_points,
+                                                                                                    intrinsic_camera_matrix)
+    return rotation, translation, triangulated_points
 
 
 img1 = cv2.imread("data/road1.jpg")
@@ -94,5 +98,23 @@ intrinsic_camera_matrix = np.asarray([[9.842439e+02, 0.000000e+00, 6.900000e+02]
                                       [0.000000e+00, 9.808141e+02, 2.331966e+02],
                                       [0.000000e+00, 0.000000e+00, 1.000000e+00]])
 
-find_initial_position(img1, img2)
+R, T, points = find_initial_position(img1, img2)
+
+display.setup_pangolin()
+
+while not display.should_quit():
+    display.init_frame()
+    # for pose in CAMERA_POSES:
+    #     display.draw_camera(pose)
+    camera_1_pose = np.identity(4)
+    camera_2_pose = np.identity(4)
+    camera_2_pose[:3, :3] = R
+    camera_2_pose[:3, 3] = T
+
+    display.draw_camera(camera_1_pose, (0.0, 1.0, 0.0))
+    display.draw_camera(camera_2_pose, (0.0, 1.0, 1.0))
+
+    display.draw_points(points)
+
+    display.finish_frame()
 
