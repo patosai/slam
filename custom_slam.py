@@ -75,11 +75,12 @@ def find_initial_position(img1, img2):
                                       [0, img2_scale, -1*img2_scale*img2_centroid[1]],
                                       [0, 0, 1]])
 
-    good_img1_points = (good_img1_points - img1_centroid) * img1_scale
-    good_img2_points = (good_img2_points - img2_centroid) * img2_scale
+    scaled_good_img1_points = (good_img1_points - img1_centroid) * img1_scale
+    scaled_good_img2_points = (good_img2_points - img2_centroid) * img2_scale
 
     # fundamental_matrix = fundamental.calculate_fundamental_matrix(good_img1_points, good_img2_points)
-    fundamental_matrix = fundamental.calculate_fundamental_matrix_with_ransac(good_img1_points, good_img2_points)
+    fundamental_matrix = fundamental.calculate_fundamental_matrix_with_ransac(scaled_good_img1_points,
+                                                                              scaled_good_img2_points)
 
     # unscale fundamental matrix
     fundamental_matrix = img2_transform_matrix.transpose() @ fundamental_matrix @ img1_transform_matrix
@@ -104,8 +105,6 @@ display.setup_pangolin()
 
 while not display.should_quit():
     display.init_frame()
-    # for pose in CAMERA_POSES:
-    #     display.draw_camera(pose)
     camera_1_pose = np.identity(4)
     camera_2_pose = np.identity(4)
     camera_2_pose[:3, :3] = R

@@ -41,7 +41,12 @@ def triangulate_points(rotation, translation, img1_points, img2_points, intrinsi
 
     triangulated_points = np.asarray([projected_points[0] / projected_points[3],
                                       projected_points[1] / projected_points[3],
-                                      projected_points[1] / projected_points[3]]).transpose()
+                                      projected_points[2] / projected_points[3]]).transpose()
+
+    print("projected points")
+    print(projected_points)
+    print("triangulated points")
+    print(triangulated_points)
 
     return triangulated_points
 
@@ -72,8 +77,9 @@ def essential_matrix_to_rotation_translation(essential_matrix, img1_points, img2
                                                      img2_points,
                                                      intrinsic_camera_matrix)
             camera_2_vector = rotation @ np.asarray([0, 0, 1])
-            print(triangulated_points)
+            print("camera vector")
             print(camera_2_vector)
+            print("translation")
             print(translation)
 
             points_in_front_of_camera_1 = triangulated_points[:, 2] > 0
@@ -88,6 +94,7 @@ def essential_matrix_to_rotation_translation(essential_matrix, img1_points, img2
                 winning_num_points = num_points_in_front_of_camera
                 winning_triangulated_points = triangulated_points
 
+    print("==========")
     print("winning rotation")
     print(winning_rotation)
     print("winning translation")
