@@ -9,3 +9,8 @@ Usage
 Install Pangolin
 =======
 - Go to `https://github.com/uoip/pangolin`
+
+Current status
+=======
+- Initial establishment of camera position and triangulated points complete
+- Next steps: triangulate future camera positions and other points
