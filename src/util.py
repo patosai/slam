@@ -1,9 +1,9 @@
 import numpy as np
 
 
-def pixel_to_camera_coords(xy_point):
-    "takes a 2d point and adds a z-coordinate set to 1"
-    return np.asarray([xy_point[0], xy_point[1], 1])
+def to_homogenous_coordinates(point):
+    """takes a point and adds 1 to make it homogenous coordinates"""
+    return np.hstack((point, [[1]]))
 
 
 def vector_to_cross_product_matrix(vector):
