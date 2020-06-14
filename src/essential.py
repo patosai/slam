@@ -47,13 +47,13 @@ def triangulate_points(rotation, translation, img1_points, img2_points, intrinsi
     # the rotation and translation are given as the movement of the camera
     # so the rotation/translation need to be inverted
     img1_camera_matrix = intrinsic_camera_matrix @ np.hstack((np.identity(3), np.zeros((3, 1))))
-    img2_camera_matrix = intrinsic_camera_matrix @ np.hstack((rotation.transpose(), -translation.reshape((3, 1))))
+    img2_camera_matrix = intrinsic_camera_matrix @ np.hstack((rotation.transpose(), -1*translation.reshape((3, 1))))
 
     triangulated_points = []
     for img1_pt, img2_pt in zip(img1_points, img2_points):
-        d = np.asarray([-img1_camera_matrix[1] + img1_pt[1]*img1_camera_matrix[2],
+        d = np.asarray([-1*img1_camera_matrix[1] + img1_pt[1]*img1_camera_matrix[2],
                         img1_camera_matrix[0] - img1_pt[0]*img1_camera_matrix[2],
-                        -img2_camera_matrix[1] + img2_pt[1]*img2_camera_matrix[2],
+                        -1*img2_camera_matrix[1] + img2_pt[1]*img2_camera_matrix[2],
                         img2_camera_matrix[0] - img2_pt[0]*img2_camera_matrix[2]])
         assert d.shape == (4, 4)
 
@@ -109,12 +109,6 @@ def calculate_pose(essential_matrix, img1_points, img2_points, intrinsic_camera_
             points_in_front_of_camera_1 = triangulated_points[:, 2] > 0
             points_in_front_of_camera_2 = np.dot((triangulated_points - translation), camera_2_vector) > 0
             num_points_in_front_of_camera = np.count_nonzero(np.multiply(points_in_front_of_camera_1, points_in_front_of_camera_2))
-
-            print("camera vector")
-            print(rotation @ np.asarray([0, 0, 1]))
-            print("translation")
-            print(translation)
-            print("num points in front: ", num_points_in_front_of_camera, "/", len(img1_points))
 
             if num_points_in_front_of_camera > winning_num_points:
                 winning_rotation = rotation
