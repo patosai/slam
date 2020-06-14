@@ -4,7 +4,8 @@ Uses OpenCV, numpy, and Pangolin
 
 Usage
 =======
-- Run `custom_slam.py`
+- Run `custom_slam.py` to run my complete implementation (doesn't use OpenCV except for ORB feature extraction, that's coming soon)
+- Alternatively, run `opencv_slam.py` to see what OpenCV does
 
 Install Pangolin
 =======
