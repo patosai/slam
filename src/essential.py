@@ -66,32 +66,20 @@ def triangulate_points(rotation, translation, img1_points, img2_points, intrinsi
         d_scaled = d @ scale_factor_inverse
 
         u, s, vh = np.linalg.svd(d_scaled)
-        v = vh.transpose()
-        assert v.shape == (4, 4)
-        point = v[:, -1]
+        assert vh.shape == (4, 4)
+        point = vh[-1]
         scaled_point = point @ scale_factor
         triangulated_points.append(scaled_point)
-
 
     dimension_per_row = np.asarray(triangulated_points).transpose()
     triangulated_points = np.asarray([dimension_per_row[0] / dimension_per_row[3],
                                       dimension_per_row[1] / dimension_per_row[3],
                                       dimension_per_row[2] / dimension_per_row[3]]).transpose()
-    np.set_printoptions(suppress=False)
-    print("camera vector")
-    print(rotation @ np.asarray([0, 0, 1]))
-    print("translation")
-    print(translation)
-    print("points")
-    print(triangulated_points)
-    print("====")
-
     assert len(img1_points) == len(triangulated_points)
-
     return triangulated_points
 
 
-def essential_matrix_to_rotation_translation(essential_matrix, img1_points, img2_points, intrinsic_camera_matrix):
+def calculate_pose(essential_matrix, img1_points, img2_points, intrinsic_camera_matrix):
     """given an essential matrix, calculates the translation vector (normalized) and the rotation matrix"""
     u, s, v = np.linalg.svd(essential_matrix)
     # http://igt.ip.uca.fr/~ab/Classes/DIKU-3DCV2/Handouts/Lecture16.pdf
@@ -121,6 +109,12 @@ def essential_matrix_to_rotation_translation(essential_matrix, img1_points, img2
             points_in_front_of_camera_1 = triangulated_points[:, 2] > 0
             points_in_front_of_camera_2 = np.dot((triangulated_points - translation), camera_2_vector) > 0
             num_points_in_front_of_camera = np.count_nonzero(np.multiply(points_in_front_of_camera_1, points_in_front_of_camera_2))
+
+            print("camera vector")
+            print(rotation @ np.asarray([0, 0, 1]))
+            print("translation")
+            print(translation)
+            print("num points in front: ", num_points_in_front_of_camera, "/", len(img1_points))
 
             if num_points_in_front_of_camera > winning_num_points:
                 winning_rotation = rotation

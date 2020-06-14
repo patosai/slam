@@ -97,6 +97,7 @@ def pangolin_draw(points):
 img1 = cv2.imread("data/road1.jpg")
 img2 = cv2.imread("data/road2.jpg")
 rotation, translation, triangulated_points = find_initial_position(img1, img2)
+print("num triangulated points", len(triangulated_points))
 
 print("camera vector")
 print(rotation @ np.asarray([0, 0, 1]))

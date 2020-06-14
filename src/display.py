@@ -15,8 +15,12 @@ def setup_pangolin():
     gl.glEnable(gl.GL_DEPTH_TEST)
 
     # Define Projection and initial ModelView matrix
+    width = 640
+    height = 480
+    z_near = 0.2
+    z_far = 1000
     scam = pangolin.OpenGlRenderState(
-        pangolin.ProjectionMatrix(640, 480, 420, 420, 320, 240, 0.2, 100),
+        pangolin.ProjectionMatrix(width, height, 420, 420, 320, 240, z_near, z_far),
         pangolin.ModelViewLookAt(-2, 2, -2, 0, 0, 0, pangolin.AxisDirection.AxisY))
     handler = pangolin.Handler3D(scam)
 

@@ -12,7 +12,7 @@ def two_d_to_three_d(pt):
 
 
 def calculate_fundamental_matrix(img1_points, img2_points):
-    "Sets up a homogenous system of eight linear equations and attempts to solve the 3x3 essential matrix."
+    """Sets up a homogenous system of eight linear equations and attempts to solve the 3x3 essential matrix."""
     img1_points = np.asarray(img1_points)
     img2_points = np.asarray(img2_points)
     assert img1_points.shape == img2_points.shape
@@ -49,8 +49,8 @@ def calculate_fundamental_matrix(img1_points, img2_points):
 
 
 def calculate_fundamental_matrix_with_ransac(img1_points, img2_points, iterations=500):
-    """Calculates the fundamental matrix with pseudorandomly selected points.
-    The matrix with the most matches (inliers) is returned. This is the RANSAC algorithm."""
+    """Calculates the fundamental matrix with points pseudorandomly selected from the given points.
+    The matrix with the most matches (inliers) is returned."""
     img1_points = np.asarray(img1_points)
     img2_points = np.asarray(img2_points)
     assert img1_points.shape == img2_points.shape

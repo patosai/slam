@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-import OpenGL.GL as gl
-
 import cv2
 import matplotlib
 matplotlib.use('TkAgg')
@@ -45,12 +43,14 @@ def find_initial_position(img1, img2):
     matches = match_knn(img1_des, img2_des, k=2)
     good_img1_points = []
     good_img2_points = []
+
     for idx, (m, n) in enumerate(matches):
         # Lowe's ratio test
         first_match_much_better = m["distance"] < 0.7 * n["distance"]
         if first_match_much_better:
             img1_point = np.asarray(img1_kp[idx].pt)
             img2_point = np.asarray(img2_kp[m["index"]].pt)
+
             # my own test to choose points that move a lot
             # more parallax helps reduce off-by-one-pixel errors
             point_moved_a_lot = np.linalg.norm(img1_point - img2_point) > 10
@@ -86,10 +86,10 @@ def find_initial_position(img1, img2):
     fundamental_matrix = img2_transform_matrix.transpose() @ fundamental_matrix @ img1_transform_matrix
 
     essential_matrix = fundamental.fundamental_to_essential_matrix(fundamental_matrix, intrinsic_camera_matrix)
-    rotation, translation, triangulated_points = essential.essential_matrix_to_rotation_translation(essential_matrix,
-                                                                                                    good_img1_points,
-                                                                                                    good_img2_points,
-                                                                                                    intrinsic_camera_matrix)
+    rotation, translation, triangulated_points = essential.calculate_pose(essential_matrix,
+                                                                          good_img1_points,
+                                                                          good_img2_points,
+                                                                          intrinsic_camera_matrix)
     return rotation, translation, triangulated_points
 
 
@@ -99,7 +99,7 @@ intrinsic_camera_matrix = np.asarray([[9.842439e+02, 0.000000e+00, 6.900000e+02]
                                       [0.000000e+00, 9.808141e+02, 2.331966e+02],
                                       [0.000000e+00, 0.000000e+00, 1.000000e+00]])
 
-R, T, points = find_initial_position(img1, img2)
+rotation, translation, points = find_initial_position(img1, img2)
 
 display.setup_pangolin()
 
@@ -107,8 +107,8 @@ while not display.should_quit():
     display.init_frame()
     camera_1_pose = np.identity(4)
     camera_2_pose = np.identity(4)
-    camera_2_pose[:3, :3] = R
-    camera_2_pose[:3, 3] = T
+    camera_2_pose[:3, :3] = rotation
+    camera_2_pose[:3, 3] = translation
 
     display.draw_camera(camera_1_pose, (0.0, 1.0, 0.0))
     display.draw_camera(camera_2_pose, (0.0, 1.0, 1.0))
@@ -117,3 +117,8 @@ while not display.should_quit():
 
     display.finish_frame()
 
+# img3 = cv2.drawKeypoints(img1, plot_keypoints, outImage=None, color=(0, 255, 0))
+# plt.ion()
+# plt.imshow(img3)
+# plt.draw()
+# plt.pause(0.001)
