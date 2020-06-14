@@ -9,13 +9,13 @@ def triangulate_points(rotation, translation, img1_points, img2_points, intrinsi
     # and used in a linear system of equations to triangulate all points in the two images.
     # Let M be the projective matrix for image 1, and M' the projective matrix for image 2.
     #
-    # Let p = [u which is the 2D projection of a point in image 1.
+    # Let p = [u which is the 2D homogenous coordinates of a point in image 1.
     #          w
     #          1]
-    # Let p' = [u' which is the 2D projection of a point in image 2.
+    # Let p' = [u' which is the 2D homogenous coordinates of a point in image 2.
     #           w'
     #           1]
-    # Let P = [X which is the 3D location of the point with a scale factor W.
+    # Let P = [X which is the homogenous coordinates of the 3D location of the point
     #          Y
     #          Z
     #          W]
@@ -23,29 +23,43 @@ def triangulate_points(rotation, translation, img1_points, img2_points, intrinsi
     # p = MP
     # p' = M'P
     #
-    # From these two equations, P can be estimated.
-    # [u     [
-    #  v        M
-    #  1
-    #  u'  =         P
-    #  v'       M'
-    #  1]          ]
-    #
-    # An least-squares estimation can be calculated using numpy.linalg.lstsq
+    # Because the two sides are equal, the cross product of the two sides should equal zero.
+    # Then SVD can be applied to solve for P, similarly to the fundamental matrix.
+    # Take the vector associated with the singular value of 0
+    # ([p]_x)MP = 0
+    # ([p']_x)M'P = 0
 
     img1_projective_matrix = intrinsic_camera_matrix @ np.hstack((np.identity(3), np.zeros((3, 1))))
     img2_projective_matrix = intrinsic_camera_matrix @ np.hstack((rotation, translation.reshape((3, 1))))
     all_projective_matrices = np.vstack((img1_projective_matrix, img2_projective_matrix))
-    expected_values = np.hstack((img1_points, np.ones((len(img1_points), 1)), img2_points, np.ones((len(img2_points), 1)))).transpose()
-    projected_points, residuals, rank, singular_values = np.linalg.lstsq(all_projective_matrices, expected_values, rcond=-1)
 
-    triangulated_points = np.asarray([projected_points[0] / projected_points[3],
-                                      projected_points[1] / projected_points[3],
-                                      projected_points[2] / projected_points[3]]).transpose()
+    img1_homogenous_coordinates = np.hstack((img1_points, np.ones((len(img1_points), 1))))
+    img2_homogenous_coordinates = np.hstack((img2_points, np.ones((len(img2_points), 1))))
 
-    print("projected points")
-    print(projected_points)
+    triangulated_points = []
+    for img1_pt, img2_pt in zip(img1_homogenous_coordinates, img2_homogenous_coordinates):
+        # A has shape 6x4
+        a = np.vstack((util.vector_to_cross_product_matrix(img1_pt) @ img1_projective_matrix,
+                       util.vector_to_cross_product_matrix(img2_pt) @ img2_projective_matrix))
+        assert a.shape == (6, 4)
+        u, s, vh = np.linalg.svd(a, full_matrices=False)
+        print("------")
+        print("s")
+        print(s)
+        print("------")
+        assert u.shape[1] == 4
+        point = u[:, -1]
+        triangulated_points.append(point)
+
+    dimension_per_row = np.asarray(triangulated_points).transpose()
+    triangulated_points = np.asarray([dimension_per_row[0] / dimension_per_row[3],
+                                      dimension_per_row[1] / dimension_per_row[3],
+                                      dimension_per_row[2] / dimension_per_row[3]]).transpose()
+
+    assert len(img1_points) == len(triangulated_points)
+
     print("triangulated points")
+    np.set_printoptions(suppress=True)
     print(triangulated_points)
 
     return triangulated_points
