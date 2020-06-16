@@ -6,7 +6,8 @@ matplotlib.use('TkAgg')
 import math
 import matplotlib.pyplot as plt
 import numpy as np
-from threading import Thread
+import signal
+import threading
 
 
 from src import display, fundamental, essential, plot
@@ -66,8 +67,8 @@ def find_initial_position(img1, img2, show_keypoints=False):
 
     if show_keypoints:
         fig, ax = plt.subplots()
-        keypoints_image = img1.copy()
-        for point in good_img1_points:
+        keypoints_image = img2.copy()
+        for point in good_img2_points:
             circle = plt.Circle(point, radius=5, color='g', fill=False)
             ax.add_artist(circle)
         plt.imshow(keypoints_image)
@@ -115,10 +116,10 @@ def find_initial_position(img1, img2, show_keypoints=False):
     return rotation, translation, triangulated_points
 
 
-def run_pangolin(camera_poses, points):
+def run_pangolin(threading_event, camera_poses, points):
     display.setup_pangolin()
 
-    while not display.should_quit():
+    while not threading_event.is_set() and not display.should_quit():
         display.init_frame()
 
         for pose in camera_poses[:-1]:
@@ -153,10 +154,15 @@ if __name__ == "__main__":
     print("translation", translation)
     print(points)
 
-    thread = Thread(target=run_pangolin, args=(camera_poses, points))
-    thread.start()
-    # no need to join the thread
+    threading_event = threading.Event()
+    try:
+        thread = threading.Thread(target=run_pangolin, args=(threading_event, camera_poses, points))
+        thread.start()
+        # no need to join the thread
 
-    while True:
-        plt.show()
-        plt.pause(0.001)
+        while True:
+            plt.show()
+            plt.pause(0.001)
+            signal.pause()
+    except (KeyboardInterrupt, SystemExit):
+        threading_event.set()
