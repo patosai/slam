@@ -6,6 +6,8 @@ matplotlib.use('TkAgg')
 import math
 import matplotlib.pyplot as plt
 import numpy as np
+from threading import Thread
+
 
 from src import display, fundamental, essential, plot
 
@@ -18,13 +20,12 @@ def compute_orb(img):
     keypoints = orb.detect(img, None)
     # compute the descriptors with ORB
     keypoints, descriptors = orb.compute(img, keypoints)
-    return [keypoint.pt for keypoint in keypoints], descriptors
+    descriptor_bits = np.unpackbits(np.uint8(descriptors), axis=1)
+    return [keypoint.pt for keypoint in keypoints], descriptor_bits
 
 
 def match_knn(img1_descriptors, img2_descriptors, k=2):
     """Finds k nearest descriptors in img2 for each descriptor in img1 """
-    img1_descriptors = np.unpackbits(np.uint8(img1_descriptors), axis=1)
-    img2_descriptors = np.unpackbits(np.uint8(img2_descriptors), axis=1)
     matches = []
     for img1_idx, img1_descriptor in enumerate(img1_descriptors):
         possible_matches = []
@@ -38,7 +39,7 @@ def match_knn(img1_descriptors, img2_descriptors, k=2):
     return matches
 
 
-def find_initial_position(img1, img2):
+def find_initial_position(img1, img2, show_keypoints=False):
     """takes the first two images and finds the relative locations of the cameras"""
     img1_pts, img1_des = compute_orb(img1)
     img2_pts, img2_des = compute_orb(img2)
@@ -62,6 +63,16 @@ def find_initial_position(img1, img2):
 
     good_img1_points = np.asarray(good_img1_points)
     good_img2_points = np.asarray(good_img2_points)
+
+    if show_keypoints:
+        fig, ax = plt.subplots()
+        keypoints_image = img1.copy()
+        for point in good_img1_points:
+            circle = plt.Circle(point, radius=5, color='g', fill=False)
+            ax.add_artist(circle)
+        plt.imshow(keypoints_image)
+        plt.pause(0.001)
+
 
     point_movements = [(idx, val) for idx, val in enumerate(point_movements)]
     point_movements.sort(key=lambda x: -x[1])
@@ -104,37 +115,48 @@ def find_initial_position(img1, img2):
     return rotation, translation, triangulated_points
 
 
-img1 = cv2.imread("data/road1.jpg")
-img2 = cv2.imread("data/road2.jpg")
-intrinsic_camera_matrix = np.asarray([[9.842439e+02, 0.000000e+00, 6.900000e+02],
-                                      [0.000000e+00, 9.808141e+02, 2.331966e+02],
-                                      [0.000000e+00, 0.000000e+00, 1.000000e+00]])
+def run_pangolin(camera_poses, points):
+    display.setup_pangolin()
 
-rotation, translation, points = find_initial_position(img1, img2)
+    while not display.should_quit():
+        display.init_frame()
 
-np.set_printoptions(suppress=True)
-print("num triangulated points", len(points))
-print("camera direction", rotation @ [0, 0, 1])
-print("translation", translation)
+        for pose in camera_poses[:-1]:
+            display.draw_camera(pose, (0.0, 1.0, 0.0))
+        display.draw_camera(camera_poses[-1], (0.0, 1.0, 1.0))
 
-display.setup_pangolin()
+        display.draw_points(points)
 
-while not display.should_quit():
-    display.init_frame()
+        display.finish_frame()
+
+
+if __name__ == "__main__":
+    plt.ion()
+
+    img1 = cv2.imread("data/road1.jpg")
+    img2 = cv2.imread("data/road2.jpg")
+    intrinsic_camera_matrix = np.asarray([[9.842439e+02, 0.000000e+00, 6.900000e+02],
+                                          [0.000000e+00, 9.808141e+02, 2.331966e+02],
+                                          [0.000000e+00, 0.000000e+00, 1.000000e+00]])
+
+    rotation, translation, points = find_initial_position(img1, img2, show_keypoints=True)
+
     camera_1_pose = np.identity(4)
     camera_2_pose = np.identity(4)
     camera_2_pose[:3, :3] = rotation
     camera_2_pose[:3, 3] = translation
+    camera_poses = [camera_1_pose, camera_2_pose]
 
-    display.draw_camera(camera_1_pose, (0.0, 1.0, 0.0))
-    display.draw_camera(camera_2_pose, (0.0, 1.0, 1.0))
+    np.set_printoptions(suppress=True)
+    print("num triangulated points", len(points))
+    print("camera direction", rotation @ [0, 0, 1])
+    print("translation", translation)
+    print(points)
 
-    display.draw_points(points)
+    thread = Thread(target=run_pangolin, args=(camera_poses, points))
+    thread.start()
+    # no need to join the thread
 
-    display.finish_frame()
-
-# img3 = cv2.drawKeypoints(img1, plot_keypoints, outImage=None, color=(0, 255, 0))
-# plt.ion()
-# plt.imshow(img3)
-# plt.draw()
-# plt.pause(0.001)
+    while True:
+        plt.show()
+        plt.pause(0.001)

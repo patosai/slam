@@ -68,7 +68,7 @@ def triangulate_points(rotation, translation, img1_points, img2_points, intrinsi
         u, s, vh = np.linalg.svd(d_scaled)
         assert vh.shape == (4, 4)
         point = vh[-1]
-        scaled_point = point @ scale_factor
+        scaled_point = scale_factor @ point
         triangulated_points.append(scaled_point)
 
     dimension_per_row = np.asarray(triangulated_points).transpose()
