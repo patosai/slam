@@ -163,6 +163,6 @@ if __name__ == "__main__":
         while True:
             plt.show()
             plt.pause(0.001)
-            time.sleep(9)
+            time.sleep(0.009)
     except (KeyboardInterrupt, SystemExit):
         threading_event.set()
