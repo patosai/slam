@@ -6,8 +6,8 @@ matplotlib.use('TkAgg')
 import math
 import matplotlib.pyplot as plt
 import numpy as np
-import signal
 import threading
+import time
 
 
 from src import display, fundamental, essential, plot
@@ -163,6 +163,6 @@ if __name__ == "__main__":
         while True:
             plt.show()
             plt.pause(0.001)
-            signal.pause()
+            time.sleep(9)
     except (KeyboardInterrupt, SystemExit):
         threading_event.set()
