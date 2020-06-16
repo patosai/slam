@@ -132,8 +132,6 @@ def run_pangolin(threading_event, camera_poses, points):
 
 
 if __name__ == "__main__":
-    plt.ion()
-
     img1 = cv2.imread("data/road1.jpg")
     img2 = cv2.imread("data/road2.jpg")
     intrinsic_camera_matrix = np.asarray([[9.842439e+02, 0.000000e+00, 6.900000e+02],
@@ -160,9 +158,6 @@ if __name__ == "__main__":
         thread.start()
         # no need to join the thread
 
-        while True:
-            plt.show()
-            plt.pause(0.001)
-            time.sleep(0.009)
+        plt.show()
     except (KeyboardInterrupt, SystemExit):
         threading_event.set()
