@@ -7,6 +7,7 @@ import math
 import matplotlib.pyplot as plt
 import numpy as np
 import threading
+import time
 
 
 from src import display, fundamental, essential, plot
@@ -70,24 +71,19 @@ def find_matches_between_images(img0, img1, show_keypoints=False):
             circle = plt.Circle(point, radius=5, color='#00FF00', fill=False)
             ax.add_artist(circle)
         plt.imshow(keypoints_image)
-        plt.pause(0.001)
 
     point_movements = [{"index": idx, "movement": val} for idx, val in enumerate(point_movements)]
     point_movements.sort(key=lambda x: -x["movement"])
     point_movements = [x["index"] for x in point_movements]
     top_most_moved_point_indices = point_movements[-20:]
-    top_img0_points = good_img0_points[top_most_moved_point_indices]
-    top_img1_points = good_img0_points[top_most_moved_point_indices]
 
-    return {"best": [top_img0_points, top_img1_points],
-            "good": [good_img0_points, good_img1_points]}
+    return [good_img0_points, good_img1_points], top_most_moved_point_indices
 
 
 def find_initial_position(img0, img1, show_keypoints=False):
     """takes the first two images and finds the relative locations of the cameras"""
-    matches = find_matches_between_images(img0, img1, show_keypoints=show_keypoints)
-    top_points = matches["best"]
-    good_points = matches["good"]
+    good_points, top_point_indices = find_matches_between_images(img0, img1, show_keypoints=show_keypoints)
+    top_points = [image_points[top_point_indices] for image_points in good_points]
 
     # Hartley's coordinate normalization
     # origin of points should be at (0, 0); average distance to center should be sqrt(2)
@@ -135,6 +131,8 @@ def run_pangolin(threading_event, camera_poses, points):
 
 
 if __name__ == "__main__":
+    plt.ion()
+
     img0 = cv2.imread("data/road1.jpg")
     img1 = cv2.imread("data/road2.jpg")
     intrinsic_camera_matrix = np.asarray([[9.842439e+02, 0.000000e+00, 6.900000e+02],
@@ -150,10 +148,9 @@ if __name__ == "__main__":
     camera_poses = [camera_1_pose, camera_2_pose]
 
     np.set_printoptions(suppress=True)
-    print("num triangulated points", len(points))
+    print("num triangulated points in front: ", len([point for point in points if point[2] > 0]), "/", len(points))
     print("camera direction", rotation @ [0, 0, 1])
     print("translation", translation)
-    print(points)
 
     threading_event = threading.Event()
     try:
@@ -161,6 +158,9 @@ if __name__ == "__main__":
         thread.start()
         # no need to join the thread
 
-        plt.show()
+        while True:
+            plt.draw()
+            plt.pause(0.1)
     except (KeyboardInterrupt, SystemExit):
+        print("keyboard interrupt")
         threading_event.set()
