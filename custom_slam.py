@@ -13,14 +13,18 @@ import time
 from src import display, fundamental, essential, plot
 
 # Initiate ORB detector
-orb = cv2.ORB_create()
+ORB_DETECTOR = cv2.ORB_create()
+PANGOLIN_LOCK = threading.Lock()
+
+CAMERA_POSES = []
+TRIANGULATED_POINTS = []
 
 
 def compute_orb(img):
     """find the keypoints with ORB"""
-    keypoints = orb.detect(img, None)
+    keypoints = ORB_DETECTOR.detect(img, None)
     # compute the descriptors with ORB
-    keypoints, descriptors = orb.compute(img, keypoints)
+    keypoints, descriptors = ORB_DETECTOR.compute(img, keypoints)
     descriptor_bits = np.unpackbits(np.uint8(descriptors), axis=1)
     return [keypoint.pt for keypoint in keypoints], descriptor_bits
 
@@ -45,21 +49,18 @@ def find_matches_between_images(img0, img1, show_keypoints=False):
     img1_pts, img1_des = compute_orb(img1)
     matches = match_knn(img0_des, img1_des, k=2)
 
-    point_movements = []
     good_img0_points = []
     good_img1_points = []
 
     for idx, (m, n) in enumerate(matches):
         # Lowe's ratio test
-        first_match_much_better = m["distance"] < 0.75 * n["distance"]
+        first_match_much_better = m["distance"] < 0.5 * n["distance"]
         if first_match_much_better:
             img0_point = np.asarray(img0_pts[idx])
             img1_point = np.asarray(img1_pts[m["index"]])
 
             good_img0_points.append(img0_point)
             good_img1_points.append(img1_point)
-
-            point_movements.append(np.linalg.norm(img0_point - img1_point))
 
     good_img0_points = np.asarray(good_img0_points)
     good_img1_points = np.asarray(good_img1_points)
@@ -72,18 +73,12 @@ def find_matches_between_images(img0, img1, show_keypoints=False):
             ax.add_artist(circle)
         plt.imshow(keypoints_image)
 
-    point_movements = [{"index": idx, "movement": val} for idx, val in enumerate(point_movements)]
-    point_movements.sort(key=lambda x: -x["movement"])
-    point_movements = [x["index"] for x in point_movements]
-    top_most_moved_point_indices = point_movements[-20:]
-
-    return [good_img0_points, good_img1_points], top_most_moved_point_indices
+    return good_img0_points, good_img1_points
 
 
 def find_initial_position(img0, img1, show_keypoints=False):
     """takes the first two images and finds the relative locations of the cameras"""
-    good_points, top_point_indices = find_matches_between_images(img0, img1, show_keypoints=show_keypoints)
-    top_points = [image_points[top_point_indices] for image_points in good_points]
+    good_points = find_matches_between_images(img0, img1, show_keypoints=show_keypoints)
 
     # Hartley's coordinate normalization
     # origin of points should be at (0, 0); average distance to center should be sqrt(2)
@@ -96,13 +91,13 @@ def find_initial_position(img0, img1, show_keypoints=False):
                                     [0, scale[idx], -1*scale[idx]*centroids[idx][1]],
                                     [0, 0, 1]])
                           for idx in range(len(good_points))]
-    scaled_top_points = [(top_points[idx] - centroids[idx]) * scale[idx]
-                         for idx in range(len(good_points))]
+    scaled_good_points = [(good_points[idx] - centroids[idx]) * scale[idx]
+                          for idx in range(len(good_points))]
 
-    # fundamental_matrix = fundamental.calculate_fundamental_matrix(top_img0_points, top_img1_points)
-    fundamental_matrix = fundamental.calculate_fundamental_matrix_with_ransac(scaled_top_points[0],
-                                                                              scaled_top_points[1],
-                                                                              iterations=190)
+    # fundamental_matrix = fundamental.calculate_fundamental_matrix(good_img0_points, good_img1_points)
+    fundamental_matrix = fundamental.calculate_fundamental_matrix_with_ransac(scaled_good_points[0],
+                                                                              scaled_good_points[1],
+                                                                              iterations=500)
 
     # unscale fundamental matrix
     fundamental_matrix = transform_matrices[1].transpose() @ fundamental_matrix @ transform_matrices[0]
@@ -112,37 +107,37 @@ def find_initial_position(img0, img1, show_keypoints=False):
                                                                           good_points[0],
                                                                           good_points[1],
                                                                           intrinsic_camera_matrix)
-    top_triangulated_points = triangulated_points[top_point_indices]
-    np.set_printoptions(suppress=True)
-    print(top_triangulated_points)
-    return rotation, translation, top_triangulated_points
+    return rotation, translation, triangulated_points, good_points
 
 
-def run_pangolin(threading_event, camera_poses, points):
+def run_pangolin(stop_event, lock):
+    global PANGOLIN_LOCK, CAMERA_POSES, TRIANGULATED_POINTS
     display.setup_pangolin()
 
-    while not threading_event.is_set() and not display.should_quit():
+    while not stop_event.is_set() and not display.should_quit():
         display.init_frame()
 
-        for pose in camera_poses[:-1]:
-            display.draw_camera(pose, (0.0, 1.0, 0.0))
-        display.draw_camera(camera_poses[-1], (0.0, 1.0, 1.0))
+        with lock:
+            for pose in camera_poses[:-1]:
+                display.draw_camera(pose, (0.0, 1.0, 0.0))
+            display.draw_camera(camera_poses[-1], (0.0, 1.0, 1.0))
 
-        display.draw_points(points)
+            display.draw_points(TRIANGULATED_POINTS)
 
         display.finish_frame()
 
 
 if __name__ == "__main__":
+    lock = threading.Lock()
     plt.ion()
 
-    img0 = cv2.imread("data/road1.jpg")
-    img1 = cv2.imread("data/road2.jpg")
+    img0 = cv2.imread("data/0000000002.png")
+    img1 = cv2.imread("data/0000000003.png")
     intrinsic_camera_matrix = np.asarray([[9.842439e+02, 0.000000e+00, 6.900000e+02],
                                           [0.000000e+00, 9.808141e+02, 2.331966e+02],
                                           [0.000000e+00, 0.000000e+00, 1.000000e+00]])
 
-    rotation, translation, points = find_initial_position(img0, img1, show_keypoints=True)
+    rotation, translation, triangulated_points, image_points = find_initial_position(img0, img1, show_keypoints=True)
 
     camera_1_pose = np.identity(4)
     camera_2_pose = np.identity(4)
@@ -150,14 +145,13 @@ if __name__ == "__main__":
     camera_2_pose[:3, 3] = translation
     camera_poses = [camera_1_pose, camera_2_pose]
 
-    np.set_printoptions(suppress=True)
-    print("num triangulated points in front: ", len([point for point in points if point[2] > 0]), "/", len(points))
-    print("camera direction", rotation @ [0, 0, 1])
-    print("translation", translation)
+    with lock:
+        CAMERA_POSES = camera_poses
+        TRIANGULATED_POINTS = triangulated_points
 
     threading_event = threading.Event()
     try:
-        thread = threading.Thread(target=run_pangolin, args=(threading_event, camera_poses, points))
+        thread = threading.Thread(target=run_pangolin, args=(threading_event, lock))
         thread.start()
         # no need to join the thread
 
@@ -165,5 +159,4 @@ if __name__ == "__main__":
             plt.draw()
             plt.pause(0.1)
     except (KeyboardInterrupt, SystemExit):
-        print("keyboard interrupt")
         threading_event.set()
