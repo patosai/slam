@@ -112,7 +112,10 @@ def find_initial_position(img0, img1, show_keypoints=False):
                                                                           good_points[0],
                                                                           good_points[1],
                                                                           intrinsic_camera_matrix)
-    return rotation, translation, triangulated_points
+    top_triangulated_points = triangulated_points[top_point_indices]
+    np.set_printoptions(suppress=True)
+    print(top_triangulated_points)
+    return rotation, translation, top_triangulated_points
 
 
 def run_pangolin(threading_event, camera_poses, points):
