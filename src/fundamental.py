@@ -11,12 +11,12 @@ def two_d_to_three_d(pt):
     return np.asarray([pt[0], pt[1], 1])
 
 
-def calculate_fundamental_matrix(img1_points, img2_points):
+def calculate_fundamental_matrix(img0_points, img1_points):
     """Sets up a homogenous system of eight linear equations and attempts to solve the 3x3 essential matrix."""
+    img0_points = np.asarray(img0_points)
     img1_points = np.asarray(img1_points)
-    img2_points = np.asarray(img2_points)
-    assert img1_points.shape == img2_points.shape
-    assert len(img1_points) >= 8
+    assert img0_points.shape == img1_points.shape
+    assert len(img0_points) >= 8
 
     # Let ax, ay be the xy-coordinates of a. Let bx, be the xy-coordinates of b.
     # Let A = [ax  and B = [bx
@@ -30,12 +30,12 @@ def calculate_fundamental_matrix(img1_points, img2_points):
     # Put another way, e∙c = 0, where e = [e11 e12 e13 e21 e22 e23 e31 e32 e33],
     # and c = [bx*ax, bx*ay, bx, by*ax, by*ay, by, ax, ay, 1]
     # e C = [0, 0, 0, 0, 0, 0, 0, 0, 0]
-    C = np.transpose(np.asarray([[b[0]*a[0], b[0]*a[1], b[0], b[1]*a[0], b[1]*a[1], b[1], a[0], a[1], 1] for a, b in zip(img1_points, img2_points)]))
+    C = np.transpose(np.asarray([[b[0]*a[0], b[0]*a[1], b[0], b[1]*a[0], b[1]*a[1], b[1], a[0], a[1], 1] for a, b in zip(img0_points, img1_points)]))
     # singular value decomposition: C = USV
     u, s, vh = np.linalg.svd(C)
     # if 8 points given, select the left singular vector associated with the 0 singular value
     # otherwise, select the one associated with the minimum singular value
-    idx_to_select = -1 if len(img1_points) == 8 else np.argmin(s)
+    idx_to_select = -1 if len(img0_points) == 8 else np.argmin(s)
     estimated_f = u[:, idx_to_select]
     estimated_f = estimated_f.reshape((3, 3))
 
@@ -48,27 +48,27 @@ def calculate_fundamental_matrix(img1_points, img2_points):
     return normalized_estimated_f
 
 
-def calculate_fundamental_matrix_with_ransac(img1_points, img2_points, iterations=1500):
+def calculate_fundamental_matrix_with_ransac(img0_points, img1_points, iterations=1500):
     """Calculates the fundamental matrix with points pseudorandomly selected from the given points.
     The matrix with the most matches (inliers) is returned."""
+    img0_points = np.asarray(img0_points)
     img1_points = np.asarray(img1_points)
-    img2_points = np.asarray(img2_points)
-    assert img1_points.shape == img2_points.shape
-    assert len(img1_points) >= 8
+    assert img0_points.shape == img1_points.shape
+    assert len(img0_points) >= 8
 
-    all_indices = range(len(img1_points))
+    all_indices = range(len(img0_points))
     inlier_error_threshold = 0.005
+    img0_points_with_z = np.hstack((img0_points, np.ones((len(img0_points), 1))))
     img1_points_with_z = np.hstack((img1_points, np.ones((len(img1_points), 1))))
-    img2_points_with_z = np.hstack((img2_points, np.ones((len(img2_points), 1))))
     max_inliers = 0
     total_inlier_error = None
     max_inlier_matrix = None
     for iteration in range(iterations):
         random.seed(0x1337BEEF + iteration)
         chosen_indices = random.sample(all_indices, 8)
-        fundamental_matrix = calculate_fundamental_matrix(img1_points[chosen_indices], img2_points[chosen_indices])
-        errors = np.square([img2_point @ fundamental_matrix @ img1_point.transpose()
-                            for img1_point, img2_point in zip(img1_points_with_z, img2_points_with_z)])
+        fundamental_matrix = calculate_fundamental_matrix(img0_points[chosen_indices], img1_points[chosen_indices])
+        errors = np.square([img1_point @ fundamental_matrix @ img0_point.transpose()
+                            for img0_point, img1_point in zip(img0_points_with_z, img1_points_with_z)])
         inlier_mask = errors < inlier_error_threshold
         inlier_error = np.sum(errors[inlier_mask])
         num_inliers = np.count_nonzero(inlier_mask)

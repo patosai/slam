@@ -3,7 +3,7 @@ import numpy as np
 from . import plot, util
 
 
-def triangulate_points(rotation, translation, img1_points, img2_points, intrinsic_camera_matrix):
+def triangulate_points(rotation, translation, img0_points, img1_points, intrinsic_camera_matrix):
     """Triangulate points using linear least squares, where rotation and translation are with respect to camera 1"""
     # Given a rotation and translation between cameras, the projective matrix for each camera can be calculated
     # and used in a linear system of equations to triangulate all points in the two images.
@@ -46,15 +46,15 @@ def triangulate_points(rotation, translation, img1_points, img2_points, intrinsi
     # the camera matrix describes how the WORLD is transformed relative to the CAMERA
     # the rotation and translation are given as the movement of the camera
     # so the rotation/translation need to be inverted
-    img1_camera_matrix = intrinsic_camera_matrix @ np.hstack((np.identity(3), np.zeros((3, 1))))
-    img2_camera_matrix = intrinsic_camera_matrix @ np.hstack((rotation.transpose(), -1*translation.reshape((3, 1))))
+    img0_camera_matrix = intrinsic_camera_matrix @ np.hstack((np.identity(3), np.zeros((3, 1))))
+    img1_camera_matrix = intrinsic_camera_matrix @ np.hstack((rotation.transpose(), -1*translation.reshape((3, 1))))
 
     triangulated_points = []
-    for img1_pt, img2_pt in zip(img1_points, img2_points):
-        d = np.asarray([-1*img1_camera_matrix[1] + img1_pt[1]*img1_camera_matrix[2],
-                        img1_camera_matrix[0] - img1_pt[0]*img1_camera_matrix[2],
-                        -1*img2_camera_matrix[1] + img2_pt[1]*img2_camera_matrix[2],
-                        img2_camera_matrix[0] - img2_pt[0]*img2_camera_matrix[2]])
+    for img0_pt, img1_pt in zip(img0_points, img1_points):
+        d = np.asarray([-1*img0_camera_matrix[1] + img0_pt[1]*img0_camera_matrix[2],
+                        img0_camera_matrix[0] - img0_pt[0]*img0_camera_matrix[2],
+                        -1*img1_camera_matrix[1] + img1_pt[1]*img1_camera_matrix[2],
+                        img1_camera_matrix[0] - img1_pt[0]*img1_camera_matrix[2]])
         assert d.shape == (4, 4)
 
         # Scale all elements in D to less than 1 to reduce error
@@ -75,11 +75,11 @@ def triangulate_points(rotation, translation, img1_points, img2_points, intrinsi
     triangulated_points = np.asarray([dimension_per_row[0] / dimension_per_row[3],
                                       dimension_per_row[1] / dimension_per_row[3],
                                       dimension_per_row[2] / dimension_per_row[3]]).transpose()
-    assert len(img1_points) == len(triangulated_points)
+    assert len(img0_points) == len(triangulated_points)
     return triangulated_points
 
 
-def calculate_pose(essential_matrix, img1_points, img2_points, intrinsic_camera_matrix):
+def calculate_pose(essential_matrix, img0_points, img1_points, intrinsic_camera_matrix):
     """given an essential matrix, calculates the translation vector (normalized) and the rotation matrix"""
     u, s, v = np.linalg.svd(essential_matrix)
     # http://igt.ip.uca.fr/~ab/Classes/DIKU-3DCV2/Handouts/Lecture16.pdf
@@ -101,8 +101,8 @@ def calculate_pose(essential_matrix, img1_points, img2_points, intrinsic_camera_
         for translation in possible_translations:
             triangulated_points = triangulate_points(rotation,
                                                      translation,
+                                                     img0_points,
                                                      img1_points,
-                                                     img2_points,
                                                      intrinsic_camera_matrix)
             camera_2_vector = rotation @ np.asarray([0, 0, 1])
 
