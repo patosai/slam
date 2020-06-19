@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import collections
 import cv2
 import matplotlib
 matplotlib.use('TkAgg')
@@ -7,7 +8,6 @@ import math
 import matplotlib.pyplot as plt
 import numpy as np
 import threading
-import time
 
 
 from src import display, fundamental, essential, plot
@@ -17,7 +17,9 @@ ORB_DETECTOR = cv2.ORB_create()
 PANGOLIN_LOCK = threading.Lock()
 
 CAMERA_POSES = []
-TRIANGULATED_POINTS = []
+dd = collections.defaultdict(lambda: dd)
+TRIANGULATED_POINT_LOOKUP = dd
+ALL_TRIANGULATED_POINTS = None
 
 
 def compute_orb(img):
@@ -111,7 +113,7 @@ def find_initial_position(img0, img1, show_keypoints=False):
 
 
 def run_pangolin(stop_event, lock):
-    global PANGOLIN_LOCK, CAMERA_POSES, TRIANGULATED_POINTS
+    global PANGOLIN_LOCK, CAMERA_POSES, ALL_TRIANGULATED_POINTS
     display.setup_pangolin()
 
     while not stop_event.is_set() and not display.should_quit():
@@ -122,7 +124,8 @@ def run_pangolin(stop_event, lock):
                 display.draw_camera(pose, (0.0, 1.0, 0.0))
             display.draw_camera(camera_poses[-1], (0.0, 1.0, 1.0))
 
-            display.draw_points(TRIANGULATED_POINTS)
+            if ALL_TRIANGULATED_POINTS is not None:
+                display.draw_points(ALL_TRIANGULATED_POINTS)
 
         display.finish_frame()
 
@@ -145,13 +148,23 @@ if __name__ == "__main__":
     camera_2_pose[:3, 3] = translation
     camera_poses = [camera_1_pose, camera_2_pose]
 
+    if ALL_TRIANGULATED_POINTS is None:
+        ALL_TRIANGULATED_POINTS = triangulated_points
+    else:
+        ALL_TRIANGULATED_POINTS = np.unique(np.concatenate((ALL_TRIANGULATED_POINTS, triangulated_points), axis=0), axis=0)
+
     with lock:
         CAMERA_POSES = camera_poses
-        TRIANGULATED_POINTS = triangulated_points
+        for idx, triangulated_point in enumerate(triangulated_points):
+            if triangulated_point[2] > 0:
+                image_0_point = tuple(image_points[0][idx])
+                image_1_point = tuple(image_points[1][idx])
+                TRIANGULATED_POINT_LOOKUP[0][image_0_point] = triangulated_point
+                TRIANGULATED_POINT_LOOKUP[1][image_1_point] = triangulated_point
 
-    threading_event = threading.Event()
+    thread_stop_event = threading.Event()
     try:
-        thread = threading.Thread(target=run_pangolin, args=(threading_event, lock))
+        thread = threading.Thread(target=run_pangolin, args=(thread_stop_event, lock))
         thread.start()
         # no need to join the thread
 
@@ -159,4 +172,4 @@ if __name__ == "__main__":
             plt.draw()
             plt.pause(0.1)
     except (KeyboardInterrupt, SystemExit):
-        threading_event.set()
+        thread_stop_event.set()

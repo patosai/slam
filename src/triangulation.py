@@ -79,6 +79,6 @@ def triangulate_points_from_pose(rotation, translation, img0_points, img1_points
     return triangulated_points
 
 
-def triangulate_pose_from_points(known_points, image_points):
+def triangulate_pose_from_points(known_points, image_points, intrinsic_camera_matrix):
     # TODO
     pass

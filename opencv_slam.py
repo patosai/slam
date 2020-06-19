@@ -28,7 +28,7 @@ def compute_orb(img):
 
 # key: point in image frame; tuple of (frame_num, 2D X, 2D Y)
 # value: triangulated point; tuple of (X, Y, Z)
-TRIANGULATED_POINTS = {}
+TRIANGULATED_POINT_LOOKUP = {}
 
 # index: frame num
 # value: 3x4 camera pose matrix

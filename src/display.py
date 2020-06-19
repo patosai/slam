@@ -22,7 +22,7 @@ def setup_pangolin():
     scam = pangolin.OpenGlRenderState(
         pangolin.ProjectionMatrix(width, height, 420, 420, 320, 240, z_near, z_far),
         # Negative Y direction is up since top left corner of images is (0,0)
-        pangolin.ModelViewLookAt(-2, -2, -2, 0, 0, 0, pangolin.AxisDirection.AxisNegY))
+        pangolin.ModelViewLookAt(-2, -2, -4, 0, 0, 0, pangolin.AxisDirection.AxisNegY))
     handler = pangolin.Handler3D(scam)
 
     # Create Interactive View in window
