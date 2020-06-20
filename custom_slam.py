@@ -10,16 +10,26 @@ import numpy as np
 import threading
 
 
-from src import display, fundamental, essential, plot
+from src import display, fundamental, essential, plot, triangulation
 
 # Initiate ORB detector
 ORB_DETECTOR = cv2.ORB_create()
 PANGOLIN_LOCK = threading.Lock()
 
 CAMERA_POSES = []
-dd = collections.defaultdict(lambda: dd)
-TRIANGULATED_POINT_LOOKUP = dd
+TRIANGULATED_POINT_LOOKUP = {}
 ALL_TRIANGULATED_POINTS = None
+
+
+def get_triangulated_point(frame_num, point):
+    global TRIANGULATED_POINT_LOOKUP
+    return TRIANGULATED_POINT_LOOKUP.get(frame_num, {}).get(tuple(point))
+
+
+def set_triangulated_point(frame_num, point, triangulated_point):
+    global TRIANGULATED_POINT_LOOKUP
+    TRIANGULATED_POINT_LOOKUP[frame_num] = TRIANGULATED_POINT_LOOKUP[frame_num] or {}
+    TRIANGULATED_POINT_LOOKUP[frame_num][tuple(point)] = triangulated_point
 
 
 def compute_orb(img):
@@ -148,19 +158,36 @@ if __name__ == "__main__":
     camera_2_pose[:3, 3] = translation
     camera_poses = [camera_1_pose, camera_2_pose]
 
-    if ALL_TRIANGULATED_POINTS is None:
-        ALL_TRIANGULATED_POINTS = triangulated_points
-    else:
-        ALL_TRIANGULATED_POINTS = np.unique(np.concatenate((ALL_TRIANGULATED_POINTS, triangulated_points), axis=0), axis=0)
+    good_triangulated_points_mask = triangulated_points[:, 2] > 0
+    good_triangulated_points = triangulated_points[good_triangulated_points_mask]
 
     with lock:
         CAMERA_POSES = camera_poses
-        for idx, triangulated_point in enumerate(triangulated_points):
-            if triangulated_point[2] > 0:
+        for idx, is_good in enumerate(good_triangulated_points_mask):
+            if is_good:
                 image_0_point = tuple(image_points[0][idx])
                 image_1_point = tuple(image_points[1][idx])
-                TRIANGULATED_POINT_LOOKUP[0][image_0_point] = triangulated_point
-                TRIANGULATED_POINT_LOOKUP[1][image_1_point] = triangulated_point
+                set_triangulated_point(0, image_0_point, good_triangulated_points[idx])
+                set_triangulated_point(1, image_1_point, good_triangulated_points[idx])
+
+        if ALL_TRIANGULATED_POINTS is None:
+            ALL_TRIANGULATED_POINTS = good_triangulated_points
+        else:
+            ALL_TRIANGULATED_POINTS = np.unique(np.concatenate((ALL_TRIANGULATED_POINTS, good_triangulated_points), axis=0), axis=0)
+
+    # -------------------
+
+    img2 = cv2.imread("data/0000000005.png")
+    img1_points, img2_points = find_matches_between_images(img1, img2, show_keypoints=True)
+    known_points = []
+    matched_image_2_points = []
+    for idx, image_1_point in enumerate(img1_points):
+        known_point = get_triangulated_point(1, image_1_point)
+        if known_point is not None:
+            known_points.append(known_point)
+            matched_image_2_points.append(img2_points[idx])
+    # TODO
+    triangulation.triangulate_pose_from_points(known_points, matched_image_2_points, intrinsic_camera_matrix)
 
     thread_stop_event = threading.Event()
     try:
