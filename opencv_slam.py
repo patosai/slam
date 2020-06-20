@@ -80,7 +80,7 @@ def find_initial_position(img1, img2):
 
 def pangolin_draw(points):
     """points is a Nx3 matrix"""
-    display.setup_pangolin()
+    display.setup()
 
     while not display.should_quit():
         display.init_frame()

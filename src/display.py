@@ -9,7 +9,7 @@ scam = None
 dcam = None
 
 
-def setup_pangolin():
+def setup():
     global dcam, scam
     pangolin.CreateWindowAndBind('Main', 640, 480)
     gl.glEnable(gl.GL_DEPTH_TEST)
