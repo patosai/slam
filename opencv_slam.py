@@ -84,18 +84,17 @@ def pangolin_draw(points):
 
     while not display.should_quit():
         display.init_frame()
-        # for pose in CAMERA_POSES:
-        #     display.draw_camera(pose)
-        display.draw_camera(CAMERA_POSES[0], (0.0, 1.0, 0.0))
-        display.draw_camera(CAMERA_POSES[1], (0.0, 1.0, 1.0))
+        for pose in CAMERA_POSES:
+            homogenous_pose = np.vstack((pose, [0, 0, 0, 1]))
+            display.draw_camera(homogenous_pose, (0.0, 1.0, 0.0))
 
         display.draw_points(points)
 
         display.finish_frame()
 
 
-img1 = cv2.imread("data/road1.jpg")
-img2 = cv2.imread("data/road2.jpg")
+img1 = cv2.imread("data/0000000000.png")
+img2 = cv2.imread("data/0000000003.png")
 rotation, translation, triangulated_points = find_initial_position(img1, img2)
 print("num triangulated points", len(triangulated_points))
 

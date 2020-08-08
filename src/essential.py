@@ -1,6 +1,6 @@
 import numpy as np
 
-from . import triangulation
+from . import triangulation, util
 
 
 def calculate_pose(essential_matrix, img0_points, img1_points, intrinsic_camera_matrix):
@@ -23,11 +23,14 @@ def calculate_pose(essential_matrix, img0_points, img1_points, intrinsic_camera_
     winning_triangulated_points = None
     for rotation in possible_rotations:
         for translation in possible_translations:
-            triangulated_points = triangulation.triangulate_points_from_pose(rotation,
-                                                                             translation,
+            # The camera matrix describes how the WORLD is transformed relative to the CAMERA
+            # To see the motion of the camera, rotation/translation need to be inverted
+            img0_camera_matrix = intrinsic_camera_matrix @ np.hstack((np.identity(3), np.zeros((3, 1))))
+            img1_camera_matrix = intrinsic_camera_matrix @ np.hstack((rotation.transpose(), -1*translation.reshape((3, 1))))
+            triangulated_points = triangulation.triangulate_points_from_pose(img0_camera_matrix,
+                                                                             img1_camera_matrix,
                                                                              img0_points,
-                                                                             img1_points,
-                                                                             intrinsic_camera_matrix)
+                                                                             img1_points)
             camera_2_vector = rotation @ np.asarray([0, 0, 1])
 
             points_in_front_of_camera_1 = triangulated_points[:, 2] > 0
@@ -40,4 +43,4 @@ def calculate_pose(essential_matrix, img0_points, img1_points, intrinsic_camera_
                 winning_num_points = num_points_in_front_of_camera
                 winning_triangulated_points = triangulated_points
 
-    return winning_rotation, winning_translation, winning_triangulated_points
+    return util.rotation_translation_to_pose(winning_rotation, winning_translation), winning_triangulated_points

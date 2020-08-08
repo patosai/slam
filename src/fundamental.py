@@ -48,7 +48,7 @@ def calculate_fundamental_matrix(img0_points, img1_points):
     return normalized_estimated_f
 
 
-def calculate_fundamental_matrix_with_ransac(img0_points, img1_points, iterations=1500):
+def calculate_fundamental_matrix_with_ransac(img0_points, img1_points, iterations=1024):
     """Calculates the fundamental matrix with points pseudorandomly selected from the given points.
     The matrix with the most matches (inliers) is returned."""
     img0_points = np.asarray(img0_points)
