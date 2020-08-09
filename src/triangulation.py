@@ -82,6 +82,7 @@ def triangulate_points_from_pose(img0_camera_matrix, img1_camera_matrix, img0_po
 def triangulate_pose_from_points(known_3d_points, image_points, intrinsic_camera_matrix):
     """Triangulate camera pose from known 3D points and 2D matches in the camera image"""
     assert len(known_3d_points) == len(image_points)
+    assert len(known_3d_points) >= 6
     # Similar to above, p = MP, where
     #   - p is the 3x1 2D homogenous point, p = [u, v, 1]
     #   - M is the 3x4 camera matrix (UNKNOWN)
@@ -114,7 +115,7 @@ def triangulate_pose_from_points(known_3d_points, image_points, intrinsic_camera
     translation = result[:3, 3]
     return util.rotation_translation_to_pose(rotation, translation)
 
-    # # decompose left 3x3 matrix with SVD to recover rotation matrix and scale factor
+    # decompose left 3x3 matrix with SVD to recover rotation matrix and scale factor
     # u, s, vh = np.linalg.svd(result[:, :3])
     # scale_factor = s[0]
     # rotation = u @ vh
@@ -127,13 +128,10 @@ def triangulate_pose_from_points_with_ransac(previous_camera_pose,
                                              previous_image_points,
                                              image_points,
                                              intrinsic_camera_matrix,
-                                             iterations=8):
-    assert len(known_3d_points) == len(image_points)
+                                             iterations=256):
     all_indices = range(len(image_points))
     known_3d_points = np.asarray(known_3d_points)
     image_points = np.asarray(image_points)
-
-    good_point_distance_cutoff = 10
 
     winning_pose = None
     winning_num_good_points = -1
@@ -151,7 +149,7 @@ def triangulate_pose_from_points_with_ransac(previous_camera_pose,
                                                            previous_image_points,
                                                            image_points)
         distances_from_known = np.linalg.norm(known_3d_points - triangulated_points, axis=1)
-        num_good_points = np.count_nonzero(distances_from_known < good_point_distance_cutoff)
+        num_good_points = np.count_nonzero(distances_from_known < 0.1)
         error = np.sum(distances_from_known)
         if (num_good_points > winning_num_good_points) or (num_good_points == winning_num_good_points and error < winning_error):
             winning_pose = next_camera_pose
@@ -168,90 +166,26 @@ def triangulate_pose_from_points_with_ransac(previous_camera_pose,
 
 
 if __name__ == "__main__":
-    known_3d_points = np.asarray([[1.58053041e+00, -3.20156923e+00, 5.03916598e+01],
-                                  [-8.09583849e+00, -1.05173228e+00, 6.12705667e+01],
-                                  [-2.16507803e+00, -3.10635558e+00, 7.60814226e+01],
-                                  [-6.34364941e-02, -5.63441545e-01, 5.80920451e+01],
-                                  [-2.82575971e+00, -3.58970662e+00, 8.17548681e+01],
-                                  [2.37329213e+00, -2.21337026e+00, 7.51611333e+01],
-                                  [-3.38914767e+00, -2.63351425e+00, 7.51221960e+01],
-                                  [-7.37504688e+00, 2.69810112e+00, 1.66449735e+01],
-                                  [-1.02491303e+01, -1.56004211e+00, 6.09047941e+01],
-                                  [-1.90565982e+00, 2.43619355e-01, 1.48406014e+01],
-                                  [-2.88958131e+00, -1.75010805e+00, 6.54434401e+01],
-                                  [-1.33287248e+01, -6.45483875e-01, 3.70017434e+01],
-                                  [-1.50247316e+01, -8.67126947e+00, 5.73489786e+01],
-                                  [1.39182190e+00, -8.09629071e-01, 5.34166778e+01],
-                                  [3.10346764e+00, -1.18874630e+00, 7.46361407e+01],
-                                  [3.10363168e+00, -1.05783545e+00, 7.65939931e+01],
-                                  [-2.50051654e+00, -2.05662026e+00, 5.21600525e+01],
-                                  [8.09005253e-01, -2.07296511e-01, 2.05331117e+01],
-                                  [9.88787974e-01, -3.47755336e-01, 2.55688033e+01]])
-    previous_image_points = np.asarray([[720., 171.],
-                                        [557., 217.],
-                                        [661., 194.],
-                                        [688., 224.],
-                                        [655., 191.],
-                                        [721., 205.],
-                                        [644.40002441, 199.20001221],
-                                        [222.00001526, 404.40002441],
-                                        [520.80004883, 208.80000305],
-                                        [548.64001465, 252.00001526],
-                                        [645.11999512, 207.36001587],
-                                        [324.        , 217.44000244],
-                                        [426.24002075,  84.96000671],
-                                        [715.39208984, 219.45602417],
-                                        [730.9440918 , 217.72802734],
-                                        [729.9072876 , 219.80163574],
-                                        [640.74249268, 194.91842651],
-                                        [726.58959961, 223.94885254],
-                                        [727.38592529, 222.15727234]])
-    image_points = np.asarray([[720,         166],
-                               [553,         213],
-                               [660,         190],
-                               [687,         220],
-                               [654,         186],
-                               [721,         200],
-                               [643.20001221, 194.40000916],
+    known_3d_points = np.asarray([[ 6.03787985, -4.89579876, 62.66137844],
+                                  [-8.39317134, 3.03552779, 18.92342537],
+                                  [-15.53855632, -2.46611132, 92.2252502],
+                                  [-2.58636809, 0.3066047, 20.0799362],
+                                  [-16.17911693, -0.85989838, 44.88294597],
+                                  [-18.83353488, -10.9979917, 71.92970211],
+                                  [2.28097053, -0.6059205, 58.0935008],
+                                  [3.27491554, -1.18588676, 85.08488668]])
+    image_points = np.asarray([[783.60003662, 152.40000916],
                                [142.56001282, 427.68002319],
                                [513.60003662, 204.00001526],
-                               [504.5760498,  250.56002808],
-                               [643.68005371, 203.04000854],
+                               [504.5760498, 250.56002808],
                                [299.52001953, 213.12001038],
-                               [413.2800293,   73.44000244],
-                               [715.39208984, 214.27201843],
-                               [730.9440918,  214.27201843],
-                               [729.9072876,  215.6544342, ],
-                               [640.74249268, 192.84483337],
+                               [413.2800293, 73.44000244],
                                [726.58959961, 221.46052551],
                                [727.38592529, 218.57409668]])
-    previous_pose = np.asarray([[9.99985692e-01, 5.28993613e-03, 7.94646417e-04, -9.19542164e-02],
-                                [-5.28994719e-03, 9.99986008e-01, 1.18131948e-05, 3.80877809e-02],
-                                [-7.94572807e-04, -1.60166633e-05,  9.99999684e-01, -9.95034544e-01]])
     intrinsic_camera_matrix = np.asarray([[9.842439e+02, 0.000000e+00, 6.900000e+02],
                                           [0.000000e+00, 9.808141e+02, 2.331966e+02],
                                           [0.000000e+00, 0.000000e+00, 1.000000e+00]])
-
-    chosen_indices = [1, 2, 7, 8, 11, 12]
-
-    pose = triangulate_pose_from_points(known_3d_points[chosen_indices],
-                                        image_points[chosen_indices],
-                                        intrinsic_camera_matrix)
-    print(known_3d_points[chosen_indices])
-    print(image_points[chosen_indices])
-    print("camera vector:", util.pose_to_rotation(pose) @ [0, 0, 1], "translation: ", util.pose_to_translation(pose))
-
-    show_image = True
-    if show_image:
-        all_indices = range(len(image_points))
-        figure, axes = plt.subplots()
-        axes.clear()
-        for point in image_points:
-            circle = plt.Circle(point, radius=5, color='#FF0000', fill=False)
-            axes.add_artist(circle)
-        for point in image_points[chosen_indices]:
-            circle = plt.Circle(point, radius=5, color='#00FF00', fill=False)
-            axes.add_artist(circle)
-        axes.imshow(cv2.imread("data/0000000005.png"))
-        plt.show()
-
+    pose = triangulate_pose_from_points(known_3d_points, image_points, intrinsic_camera_matrix)
+    print(pose)
+    print(util.pose_to_translation(pose))
+    print(util.pose_to_rotation(pose))

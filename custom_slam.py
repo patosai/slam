@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import threading
 
-from src import display, fundamental, essential, logger, triangulation, util
+from src import display, fundamental, essential, logger, plot, triangulation, util
 
 
 
@@ -226,7 +226,7 @@ if __name__ == "__main__":
 
     slam.find_initial_pose(img0, img1)
 
-    img2 = cv2.imread("data/0000000005.png")
+    img2 = cv2.imread("data/0000000004.png")
     slam.find_next_pose(img1, img2)
 
     try:
