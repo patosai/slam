@@ -32,9 +32,10 @@ class Slam:
             self.start_3d_visualization()
 
     def reset(self):
-        self.camera_poses = []
-        self.triangulated_point_lookup = {}
-        self.all_triangulated_points = None
+        with self.visualization_lock:
+            self.camera_poses = [np.identity(4)]
+            self.triangulated_point_lookup = {}
+            self.all_triangulated_points = None
 
     def start_3d_visualization(self):
         thread_stop_event = threading.Event()
@@ -48,15 +49,27 @@ class Slam:
             self.visualization_stop_event.set()
 
     def get_triangulated_point(self, frame_num, point):
+        assert len(point) == 2
         return self.triangulated_point_lookup.get(frame_num, {}).get(tuple(point))
 
     def set_triangulated_point(self, frame_num, point, triangulated_point):
+        assert len(point) == 2
         self.triangulated_point_lookup[frame_num] = self.triangulated_point_lookup.get(frame_num, {})
         self.triangulated_point_lookup[frame_num][tuple(point)] = triangulated_point
+
+    def current_frame_num(self):
+        return len(self.camera_poses)
 
     def add_camera_pose(self, pose):
         with self.visualization_lock:
             self.camera_poses.append(pose)
+
+    def add_triangulated_points(self, points):
+        with self.visualization_lock:
+            if self.all_triangulated_points is None:
+                self.all_triangulated_points = np.asarray(points)
+            else:
+                self.all_triangulated_points = np.append(self.all_triangulated_points, points, axis=0)
 
     def get_latest_camera_pose(self):
         return self.camera_poses[-1]
@@ -93,37 +106,28 @@ class Slam:
 
         for idx, (m, n) in enumerate(matches):
             # Lowe's ratio test
-            first_match_much_better = m["distance"] < 0.5 * n["distance"]
+            first_match_much_better = m["distance"] < 0.7 * n["distance"]
             if first_match_much_better:
                 img0_point = np.asarray(img0_pts[idx])
                 img1_point = np.asarray(img1_pts[m["index"]])
-
-                good_img0_points.append(img0_point)
-                good_img1_points.append(img1_point)
-
+                distance = np.linalg.norm(img0_point - img1_point)
+                # more than 5px parallax
+                if distance > 16:
+                    good_img0_points.append(img0_point)
+                    good_img1_points.append(img1_point)
         good_img0_points = np.asarray(good_img0_points)
         good_img1_points = np.asarray(good_img1_points)
 
         if self.show_image_keypoints:
             self.pyplot_subplots = self.pyplot_subplots or plt.subplots()
+            plot.plot_image_matches(img0, good_img0_points, img1, good_img1_points, subplots=self.pyplot_subplots, show=False)
             figure, axes = self.pyplot_subplots
-            axes.clear()
-            keypoints_image = img1.copy()
-            for point in good_img1_points:
-                circle = plt.Circle(point, radius=5, color='#00FF00', fill=False)
-                axes.add_artist(circle)
-            axes.imshow(keypoints_image)
-            plt.draw()
+            figure.canvas.draw_idle()
             plt.pause(0.001)
 
         return good_img0_points, good_img1_points
 
-    def find_initial_pose(self, img0, img1):
-        """takes the first two images and finds the relative locations of the cameras"""
-        logger.info("Finding initial pose...")
-
-        self.reset()
-
+    def retrieve_pose_and_triangulated_points(self, img0, img1):
         good_points = self.find_matches_between_images(img0, img1)
 
         # Hartley's coordinate normalization
@@ -143,7 +147,7 @@ class Slam:
         # fundamental_matrix = fundamental.calculate_fundamental_matrix(good_img0_points, good_img1_points)
         fundamental_matrix = fundamental.calculate_fundamental_matrix_with_ransac(scaled_good_points[0],
                                                                                   scaled_good_points[1],
-                                                                                  iterations=8)
+                                                                                  iterations=128)
 
         # unscale fundamental matrix
         fundamental_matrix = transform_matrices[1].transpose() @ fundamental_matrix @ transform_matrices[0]
@@ -154,43 +158,62 @@ class Slam:
                                                                       good_points[1],
                                                                       self.intrinsic_camera_matrix)
 
-        logger.info("Initial pose - camera direction: ", util.pose_to_rotation(camera_2_pose) @ [0, 0, 1],
-                    " translation: ", util.pose_to_translation(camera_2_pose))
-        camera_1_pose = util.rotation_translation_to_pose(np.identity(3), np.zeros(3))
-        camera_poses = [camera_1_pose, camera_2_pose]
-
         good_triangulated_points_mask = triangulated_points[:, 2] > 0
-        good_triangulated_points = triangulated_points[good_triangulated_points_mask]
 
-        with self.visualization_lock:
-            self.camera_poses = camera_poses
-            self.all_triangulated_points = good_triangulated_points
-        for idx, is_good in enumerate(good_triangulated_points_mask):
+        return camera_2_pose, good_points, triangulated_points, good_triangulated_points_mask
+
+    def find_initial_pose(self, img0, img1):
+        """takes the first two images and finds the relative locations of the cameras"""
+        logger.info("Finding initial pose...")
+
+        self.reset()
+
+        camera_pose, points2d, points3d, good_points_mask = self.retrieve_pose_and_triangulated_points(img0, img1)
+
+        logger.info("First pose - translation: ", util.pose_to_translation(camera_pose), ", camera vector: ", util.pose_to_rotation(camera_pose) @ [0, 0, 1])
+
+        for idx, is_good in enumerate(good_points_mask):
             if is_good:
-                image_0_point = tuple(good_points[0][idx])
-                image_1_point = tuple(good_points[1][idx])
-                self.set_triangulated_point(0, image_0_point, triangulated_points[idx])
-                self.set_triangulated_point(1, image_1_point, triangulated_points[idx])
+                image_0_point = tuple(points2d[0][idx])
+                image_1_point = tuple(points2d[1][idx])
+                self.set_triangulated_point(0, image_0_point, points3d[idx])
+                self.set_triangulated_point(1, image_1_point, points3d[idx])
+        self.add_triangulated_points(points3d[good_points_mask])
+        self.add_camera_pose(camera_pose)
 
     def find_next_pose(self, img0, img1):
         logger.info("Finding next pose...")
-        img0_points, img1_points = self.find_matches_between_images(img0, img1)
-        known_3d_points = []
-        matched_img0_points = []
-        matched_img1_points = []
-        for idx, img0_point in enumerate(img0_points):
-            known_point = self.get_triangulated_point(1, img0_point)
-            if known_point is not None and known_point[2] < 100:
-                known_3d_points.append(known_point)
-                matched_img0_points.append(img0_point)
-                matched_img1_points.append(img1_points[idx])
 
-        camera_pose, triangulated_points = triangulation.triangulate_pose_from_points_with_ransac(self.get_latest_camera_pose(),
-                                                                                                  known_3d_points,
-                                                                                                  matched_img0_points,
-                                                                                                  matched_img1_points,
-                                                                                                  intrinsic_camera_matrix)
-        next_pose = self.get_latest_camera_pose() @ camera_pose
+        camera_pose, points2d, points3d, good_points_mask = self.retrieve_pose_and_triangulated_points(img0, img1)
+
+        # retrieve scale
+        known_3d_points = []
+        triangulated_3d_points = []
+        for idx, img0_point in enumerate(points2d[0]):
+            already_triangulated_point = self.get_triangulated_point(self.current_frame_num()-1, img0_point)
+            if already_triangulated_point is not None:
+                known_3d_points.append(already_triangulated_point)
+                triangulated_3d_points.append(points3d[idx])
+        known_3d_points = np.asarray(known_3d_points)
+        triangulated_3d_points = np.asarray(triangulated_3d_points)
+        assert len(known_3d_points) == len(triangulated_3d_points)
+        assert len(known_3d_points) >= 2
+        known_distances = np.linalg.norm(np.diff(known_3d_points, axis=0), axis=1)
+        calculated_distances = np.linalg.norm(np.diff(triangulated_3d_points, axis=0), axis=1)
+        scale = np.average(known_distances) / np.average(calculated_distances)
+        pose_to_scale = util.rotation_translation_to_pose(util.pose_to_rotation(camera_pose),
+                                                          util.pose_to_translation(camera_pose)*scale,)
+
+        next_pose = self.get_latest_camera_pose() @ pose_to_scale
+        logger.info("Next pose - translation:", util.pose_to_translation(next_pose),
+                    ", camera vector:", util.pose_to_rotation(next_pose) @ [0, 0, 1])
+        for idx, is_good in enumerate(good_points_mask):
+            if is_good:
+                image_0_point = tuple(points2d[0][idx])
+                image_1_point = tuple(points2d[1][idx])
+                self.set_triangulated_point(self.current_frame_num(), image_0_point, points3d[idx])
+                self.set_triangulated_point(self.current_frame_num(), image_1_point, points3d[idx])
+        self.add_triangulated_points(points3d[good_points_mask])
         self.add_camera_pose(next_pose)
 
     def run_visualization(self, stop_event):
@@ -221,13 +244,20 @@ if __name__ == "__main__":
                 show_image_keypoints=True,
                 show_3d_visualization=True)
 
-    img0 = cv2.imread("data/0000000002.png")
-    img1 = cv2.imread("data/0000000003.png")
+    img0 = cv2.imread("data/0000000000.png")
+    img1 = cv2.imread("data/0000000002.png")
 
     slam.find_initial_pose(img0, img1)
 
-    img2 = cv2.imread("data/0000000004.png")
-    slam.find_next_pose(img1, img2)
+    # img2 = cv2.imread("data/0000000002.png")
+    # slam.find_next_pose(img1, img2)
+    for val in range(4, 28, 2):
+        img0 = img1
+        image_str = f"data/{val:0>10}.png"
+        img1 = cv2.imread(image_str)
+        slam.find_next_pose(img0, img1)
+        plt.draw()
+        plt.pause(0.1)
 
     try:
         while True:

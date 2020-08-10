@@ -5,6 +5,8 @@
 import numpy as np
 import random
 
+from . import logger
+
 
 def two_d_to_three_d(pt):
     """Given a 2D point in (X, Y), returns a 3D projection of it"""
@@ -33,10 +35,7 @@ def calculate_fundamental_matrix(img0_points, img1_points):
     C = np.transpose(np.asarray([[b[0]*a[0], b[0]*a[1], b[0], b[1]*a[0], b[1]*a[1], b[1], a[0], a[1], 1] for a, b in zip(img0_points, img1_points)]))
     # singular value decomposition: C = USV
     u, s, vh = np.linalg.svd(C)
-    # if 8 points given, select the left singular vector associated with the 0 singular value
-    # otherwise, select the one associated with the minimum singular value
-    idx_to_select = -1 if len(img0_points) == 8 else np.argmin(s)
-    estimated_f = u[:, idx_to_select]
+    estimated_f = u[:, -1]
     estimated_f = estimated_f.reshape((3, 3))
 
     # enforce that F has two singular values that are 1, and the third is 0
@@ -76,6 +75,7 @@ def calculate_fundamental_matrix_with_ransac(img0_points, img1_points, iteration
             max_inliers = num_inliers
             max_inlier_matrix = fundamental_matrix
             total_inlier_error = inlier_error
+    logger.info("fundamental matrix ransac - num inliers: ", max_inliers, ", error: ", total_inlier_error)
     return max_inlier_matrix
 
 

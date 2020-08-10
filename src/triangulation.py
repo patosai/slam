@@ -101,6 +101,7 @@ def triangulate_pose_from_points(known_3d_points, image_points, intrinsic_camera
     equations = [[[0, 0, 0, 0, -x, -y, -z, -1, v*x, v*y, v*z, v],
                   [x, y, z, 1, 0, 0, 0, 0, -u*x, -u*y, -u*z, -u]]
                  for [u, v], [x, y, z] in zip(image_points, known_3d_points)]
+    # TODO pretty sure coordinate normalization needs to happen, otherwise big error happens
     a = np.concatenate(equations, axis=0)
     # once again, use SVD to find x; it's the column in V corresponding to the smallest singular value
     u, s, vh = np.linalg.svd(a)
@@ -112,7 +113,7 @@ def triangulate_pose_from_points(known_3d_points, image_points, intrinsic_camera
     scale_factor = np.cbrt(determinant)
     result = result / scale_factor
     rotation = result[:3, :3]
-    translation = result[:3, 3]
+    translation = result[:, 3]
     return util.rotation_translation_to_pose(rotation, translation)
 
     # decompose left 3x3 matrix with SVD to recover rotation matrix and scale factor
@@ -128,7 +129,9 @@ def triangulate_pose_from_points_with_ransac(previous_camera_pose,
                                              previous_image_points,
                                              image_points,
                                              intrinsic_camera_matrix,
-                                             iterations=256):
+                                             iterations=128):
+    assert len(known_3d_points) == len(image_points)
+    assert len(known_3d_points) >= 6
     all_indices = range(len(image_points))
     known_3d_points = np.asarray(known_3d_points)
     image_points = np.asarray(image_points)
@@ -157,9 +160,7 @@ def triangulate_pose_from_points_with_ransac(previous_camera_pose,
             winning_error = error
             winning_triangulated_points = triangulated_points
 
-    logger.info("Triangulated pose from points - translation:", util.pose_to_translation(winning_pose),
-                "camera vector:", util.pose_to_rotation(winning_pose) @ [0, 0, 1],
-                "num points matched:", winning_num_good_points)
+    logger.info("camera triangulation pose - num triangulated points: ", winning_triangulated_points, ", error: ", winning_error)
     return winning_pose, winning_triangulated_points
 
 # https://www-users.cs.umn.edu/~hspark/CSci5980/Lec15_PnP.pdf

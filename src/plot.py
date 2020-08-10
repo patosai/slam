@@ -10,11 +10,12 @@ def plot_image_keypoints(image, image_keypoints):
     plt.show()
 
 
-def plot_image_matches(image1, image1_points, image2, image2_points):
-    figure, axes = plt.subplots()
+def plot_image_matches(image1, image1_points, image2, image2_points, subplots=None, show=True):
+    figure, axes = subplots or plt.subplots()
+
     axes.clear()
-    plt.imshow(image1, alpha=0.5)
-    plt.imshow(image2, alpha=0.5)
+    axes.imshow(image1, alpha=0.5)
+    axes.imshow(image2, alpha=0.5)
     for point in image1_points:
         circle = plt.Circle(point, radius=5, color='#ff245c', fill=False)
         axes.add_artist(circle)
@@ -27,7 +28,9 @@ def plot_image_matches(image1, image1_points, image2, image2_points):
                           linewidth=1,
                           color='#e7ed46')
         axes.add_artist(line)
-    plt.show()
+
+    if show:
+        plt.show()
 
 
 def plot_vectors(vector_list):
@@ -105,9 +108,10 @@ if __name__ == "__main__":
         if first_match_much_better:
             img0_point = np.asarray(img0_pts[idx])
             img1_point = np.asarray(img1_pts[m["index"]])
-
-            good_img0_points.append(img0_point)
-            good_img1_points.append(img1_point)
+            distance = np.linalg.norm(img0_point-img1_point)
+            if distance > 10:
+                good_img0_points.append(img0_point)
+                good_img1_points.append(img1_point)
 
     good_img0_points = np.asarray(good_img0_points)
     good_img1_points = np.asarray(good_img1_points)
