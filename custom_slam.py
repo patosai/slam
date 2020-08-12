@@ -101,48 +101,54 @@ class Slam:
         img1_pts, img1_des = self.compute_orb(img1)
         matches = self.match_knn(img0_des, img1_des, k=2)
 
-        good_img0_points = []
-        good_img1_points = []
+        img0_points = []
+        img1_points = []
+        good_point_indices = []
 
         for idx, (m, n) in enumerate(matches):
             # Lowe's ratio test
-            first_match_much_better = m["distance"] < 0.7 * n["distance"]
+            first_match_much_better = m["distance"] < 0.75 * n["distance"]
             if first_match_much_better:
                 img0_point = np.asarray(img0_pts[idx])
                 img1_point = np.asarray(img1_pts[m["index"]])
                 distance = np.linalg.norm(img0_point - img1_point)
-                # more than 5px parallax
-                if distance > 16:
-                    good_img0_points.append(img0_point)
-                    good_img1_points.append(img1_point)
-        good_img0_points = np.asarray(good_img0_points)
-        good_img1_points = np.asarray(good_img1_points)
+                # more than 8px parallax
+                if distance > 8:
+                    good_point_indices.append(len(img0_points))
+                img0_points.append(img0_point)
+                img1_points.append(img1_point)
+        assert len(img0_points) == len(img1_points)
+        img0_points = np.asarray(img0_points)
+        img1_points = np.asarray(img1_points)
+        good_point_indices = np.asarray(good_point_indices)
 
         if self.show_image_keypoints:
             self.pyplot_subplots = self.pyplot_subplots or plt.subplots()
-            plot.plot_image_matches(img0, good_img0_points, img1, good_img1_points, subplots=self.pyplot_subplots, show=False)
+            plot.plot_image_matches(img0, img0_points, img1, img1_points, subplots=self.pyplot_subplots, show=False)
             figure, axes = self.pyplot_subplots
             figure.canvas.draw_idle()
             plt.pause(0.001)
 
-        return good_img0_points, good_img1_points
+        return [img0_points, img1_points], good_point_indices
 
     def retrieve_pose_and_triangulated_points(self, img0, img1):
-        good_points = self.find_matches_between_images(img0, img1)
+        point_matches, good_point_indices = self.find_matches_between_images(img0, img1)
+        good_point_matches = [points[good_point_indices]
+                              for points in point_matches]
 
         # Hartley's coordinate normalization
         # origin of points should be at (0, 0); average distance to center should be sqrt(2)
         centroids = [np.average(points, axis=0)
-                     for points in good_points]
-        scale = [math.sqrt(2) / np.average(np.linalg.norm(good_points[idx] - centroids[idx], axis=1))
-                 for idx in range(len(good_points))]
+                     for points in good_point_matches]
+        scale = [math.sqrt(2) / np.average(np.linalg.norm(good_point_matches[idx] - centroids[idx], axis=1))
+                 for idx in range(len(good_point_matches))]
 
         transform_matrices = [np.array([[scale[idx], 0, -1*scale[idx]*centroids[idx][0]],
                                         [0, scale[idx], -1*scale[idx]*centroids[idx][1]],
                                         [0, 0, 1]])
-                              for idx in range(len(good_points))]
-        scaled_good_points = [(good_points[idx] - centroids[idx]) * scale[idx]
-                              for idx in range(len(good_points))]
+                              for idx in range(len(good_point_matches))]
+        scaled_good_points = [(good_point_matches[idx] - centroids[idx]) * scale[idx]
+                              for idx in range(len(good_point_matches))]
 
         # fundamental_matrix = fundamental.calculate_fundamental_matrix(good_img0_points, good_img1_points)
         fundamental_matrix = fundamental.calculate_fundamental_matrix_with_ransac(scaled_good_points[0],
@@ -154,13 +160,13 @@ class Slam:
 
         essential_matrix = fundamental.fundamental_to_essential_matrix(fundamental_matrix, self.intrinsic_camera_matrix)
         camera_2_pose, triangulated_points = essential.calculate_pose(essential_matrix,
-                                                                      good_points[0],
-                                                                      good_points[1],
+                                                                      good_point_matches[0],
+                                                                      good_point_matches[1],
                                                                       self.intrinsic_camera_matrix)
 
         good_triangulated_points_mask = triangulated_points[:, 2] > 0
 
-        return camera_2_pose, good_points, triangulated_points, good_triangulated_points_mask
+        return camera_2_pose, good_point_matches, triangulated_points, good_triangulated_points_mask
 
     def find_initial_pose(self, img0, img1):
         """takes the first two images and finds the relative locations of the cameras"""
@@ -237,27 +243,52 @@ class Slam:
 if __name__ == "__main__":
     plt.ion()
 
-    intrinsic_camera_matrix = np.asarray([[9.842439e+02, 0.000000e+00, 6.900000e+02],
-                                          [0.000000e+00, 9.808141e+02, 2.331966e+02],
+    intrinsic_camera_matrix = np.asarray([[180, 0.000000e+00, 6.900000e+02],
+                                          [0.000000e+00, 320, 2.331966e+02],
                                           [0.000000e+00, 0.000000e+00, 1.000000e+00]])
     slam = Slam(intrinsic_camera_matrix,
                 show_image_keypoints=True,
                 show_3d_visualization=True)
 
-    img0 = cv2.imread("data/0000000000.png")
-    img1 = cv2.imread("data/0000000002.png")
+    def get_next_frame(cap):
+        for _ in range(10):
+            cap.grab()
+        ret, img = cap.retrieve()
+        grayscale = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        return ret, grayscale
 
+
+    cap = cv2.VideoCapture('data/sanfrancisco-cut.mp4')
+    ret, img0 = get_next_frame(cap)
+    ret, img1 = get_next_frame(cap)
     slam.find_initial_pose(img0, img1)
-
-    # img2 = cv2.imread("data/0000000002.png")
-    # slam.find_next_pose(img1, img2)
-    for val in range(4, 28, 2):
+    while cap.isOpened():
         img0 = img1
-        image_str = f"data/{val:0>10}.png"
-        img1 = cv2.imread(image_str)
+        ret, image = get_next_frame(cap)
+        img1 = image
         slam.find_next_pose(img0, img1)
         plt.draw()
         plt.pause(0.1)
+    cap.release()
+
+
+    # intrinsic_camera_matrix = np.asarray([[9.842439e+02, 0.000000e+00, 6.900000e+02],
+    #                                       [0.000000e+00, 9.808141e+02, 2.331966e+02],
+    #                                       [0.000000e+00, 0.000000e+00, 1.000000e+00]])
+    # img0 = cv2.imread("data/0000000000.png")
+    # img1 = cv2.imread("data/0000000002.png")
+    #
+    # slam.find_initial_pose(img0, img1)
+    #
+    # # img2 = cv2.imread("data/0000000002.png")
+    # # slam.find_next_pose(img1, img2)
+    # for val in range(4, 28, 2):
+    #     img0 = img1
+    #     image_str = f"data/{val:0>10}.png"
+    #     img1 = cv2.imread(image_str)
+    #     slam.find_next_pose(img0, img1)
+    #     plt.draw()
+    #     plt.pause(0.1)
 
     try:
         while True:

@@ -14,8 +14,8 @@ def plot_image_matches(image1, image1_points, image2, image2_points, subplots=No
     figure, axes = subplots or plt.subplots()
 
     axes.clear()
-    axes.imshow(image1, alpha=0.5)
-    axes.imshow(image2, alpha=0.5)
+    axes.imshow(image1, alpha=0.5, cmap='gray')
+    axes.imshow(image2, alpha=0.5, cmap='gray')
     for point in image1_points:
         circle = plt.Circle(point, radius=5, color='#ff245c', fill=False)
         axes.add_artist(circle)
