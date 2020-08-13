@@ -193,22 +193,23 @@ class Slam:
         camera_pose, points2d, points3d, good_points_mask = self.retrieve_pose_and_triangulated_points(img0, img1)
 
         # retrieve scale
-        known_3d_points = []
-        triangulated_3d_points = []
-        for idx, img0_point in enumerate(points2d[0]):
-            already_triangulated_point = self.get_triangulated_point(self.current_frame_num()-1, img0_point)
-            if already_triangulated_point is not None:
-                known_3d_points.append(already_triangulated_point)
-                triangulated_3d_points.append(points3d[idx])
-        known_3d_points = np.asarray(known_3d_points)
-        triangulated_3d_points = np.asarray(triangulated_3d_points)
-        assert len(known_3d_points) == len(triangulated_3d_points)
-        assert len(known_3d_points) >= 2
-        known_distances = np.linalg.norm(np.diff(known_3d_points, axis=0), axis=1)
-        calculated_distances = np.linalg.norm(np.diff(triangulated_3d_points, axis=0), axis=1)
-        scale = np.average(known_distances) / np.average(calculated_distances)
-        pose_to_scale = util.rotation_translation_to_pose(util.pose_to_rotation(camera_pose),
-                                                          util.pose_to_translation(camera_pose)*scale,)
+        # known_3d_points = []
+        # triangulated_3d_points = []
+        # for idx, img0_point in enumerate(points2d[0]):
+        #     already_triangulated_point = self.get_triangulated_point(self.current_frame_num()-1, img0_point)
+        #     if already_triangulated_point is not None:
+        #         known_3d_points.append(already_triangulated_point)
+        #         triangulated_3d_points.append(points3d[idx])
+        # known_3d_points = np.asarray(known_3d_points)
+        # triangulated_3d_points = np.asarray(triangulated_3d_points)
+        # assert len(known_3d_points) == len(triangulated_3d_points)
+        # assert len(known_3d_points) >= 2
+        # known_distances = np.linalg.norm(np.diff(known_3d_points, axis=0), axis=1)
+        # calculated_distances = np.linalg.norm(np.diff(triangulated_3d_points, axis=0), axis=1)
+        # scale = np.average(known_distances) / np.average(calculated_distances)
+        # pose_to_scale = util.rotation_translation_to_pose(util.pose_to_rotation(camera_pose),
+        #                                                   util.pose_to_translation(camera_pose)*scale,)
+        pose_to_scale = camera_pose
 
         next_pose = self.get_latest_camera_pose() @ pose_to_scale
         logger.info("Next pose - translation:", util.pose_to_translation(next_pose),
@@ -243,8 +244,8 @@ class Slam:
 if __name__ == "__main__":
     plt.ion()
 
-    intrinsic_camera_matrix = np.asarray([[180, 0.000000e+00, 6.900000e+02],
-                                          [0.000000e+00, 320, 2.331966e+02],
+    intrinsic_camera_matrix = np.asarray([[1000, 0.000000e+00, 640/2],
+                                          [0.000000e+00, 1000, 360/2],
                                           [0.000000e+00, 0.000000e+00, 1.000000e+00]])
     slam = Slam(intrinsic_camera_matrix,
                 show_image_keypoints=True,

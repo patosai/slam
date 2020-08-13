@@ -13,6 +13,21 @@ def two_d_to_three_d(pt):
     return np.asarray([pt[0], pt[1], 1])
 
 
+def calculate_fundamental_matrix_five_point(img0_points, img1_points):
+    img0_points = np.asarray(img0_points)
+    img1_points = np.asarray(img1_points)
+    assert img0_points.shape == img1_points.shape
+    assert len(img0_points) >= 5
+
+    C = np.transpose(np.asarray([[b[0]*a[0], b[0]*a[1], b[0], b[1]*a[0], b[1]*a[1], b[1], a[0], a[1], 1] for a, b in zip(img0_points, img1_points)]))
+    # singular value decomposition: C = USV
+    u, s, vh = np.linalg.svd(C)
+    null_basis_1 = vh[-1]
+    null_basis_2 = vh[-2]
+    null_basis_3 = vh[-3]
+    null_basis_4 = vh[-4]
+
+
 def calculate_fundamental_matrix(img0_points, img1_points):
     """Sets up a homogenous system of eight linear equations and attempts to solve the 3x3 essential matrix."""
     img0_points = np.asarray(img0_points)
@@ -75,7 +90,8 @@ def calculate_fundamental_matrix_with_ransac(img0_points, img1_points, iteration
             max_inliers = num_inliers
             max_inlier_matrix = fundamental_matrix
             total_inlier_error = inlier_error
-    logger.info("fundamental matrix ransac - num inliers: ", max_inliers, ", error: ", total_inlier_error)
+    logger.info("fundamental matrix ransac - num inliers: ", max_inliers, "/", len(img0_points),
+                " error: ", total_inlier_error)
     return max_inlier_matrix
 
 
