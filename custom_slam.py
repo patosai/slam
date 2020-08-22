@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import threading
 
-from src import display, fundamental, essential, logger, plot, triangulation, util
+from src import display, epipolar, logger, plot, triangulation, util
 
 
 
@@ -112,8 +112,8 @@ class Slam:
                 img0_point = np.asarray(img0_pts[idx])
                 img1_point = np.asarray(img1_pts[m["index"]])
                 distance = np.linalg.norm(img0_point - img1_point)
-                # more than 8px parallax
-                if distance > 8:
+                # more than 16px parallax
+                if distance > 16:
                     good_point_indices.append(len(img0_points))
                 img0_points.append(img0_point)
                 img1_points.append(img1_point)
@@ -151,18 +151,18 @@ class Slam:
                               for idx in range(len(good_point_matches))]
 
         # fundamental_matrix = fundamental.calculate_fundamental_matrix(good_img0_points, good_img1_points)
-        fundamental_matrix = fundamental.calculate_fundamental_matrix_with_ransac(scaled_good_points[0],
-                                                                                  scaled_good_points[1],
-                                                                                  iterations=128)
+        fundamental_matrix = epipolar.calculate_fundamental_matrix_with_ransac(scaled_good_points[0],
+                                                                               scaled_good_points[1],
+                                                                               iterations=256)
 
         # unscale fundamental matrix
         fundamental_matrix = transform_matrices[1].transpose() @ fundamental_matrix @ transform_matrices[0]
 
-        essential_matrix = fundamental.fundamental_to_essential_matrix(fundamental_matrix, self.intrinsic_camera_matrix)
-        camera_2_pose, triangulated_points = essential.calculate_pose(essential_matrix,
-                                                                      good_point_matches[0],
-                                                                      good_point_matches[1],
-                                                                      self.intrinsic_camera_matrix)
+        essential_matrix = epipolar.fundamental_to_essential_matrix(fundamental_matrix, self.intrinsic_camera_matrix)
+        camera_2_pose, triangulated_points = epipolar.calculate_pose_from_essential_matrix(essential_matrix,
+                                                                                           good_point_matches[0],
+                                                                                           good_point_matches[1],
+                                                                                           self.intrinsic_camera_matrix)
 
         good_triangulated_points_mask = triangulated_points[:, 2] > 0
 
@@ -252,7 +252,7 @@ if __name__ == "__main__":
                 show_3d_visualization=True)
 
     def get_next_frame(cap):
-        for _ in range(10):
+        for _ in range(15):
             cap.grab()
         ret, img = cap.retrieve()
         grayscale = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)

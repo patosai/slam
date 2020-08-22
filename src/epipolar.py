@@ -5,7 +5,7 @@
 import numpy as np
 import random
 
-from . import logger
+from . import logger, triangulation, util
 
 
 def two_d_to_three_d(pt):
@@ -19,7 +19,7 @@ def calculate_fundamental_matrix_five_point(img0_points, img1_points):
     assert img0_points.shape == img1_points.shape
     assert len(img0_points) >= 5
 
-    C = np.transpose(np.asarray([[b[0]*a[0], b[0]*a[1], b[0], b[1]*a[0], b[1]*a[1], b[1], a[0], a[1], 1] for a, b in zip(img0_points, img1_points)]))
+    C = np.asarray([[b[0]*a[0], b[0]*a[1], b[0], b[1]*a[0], b[1]*a[1], b[1], a[0], a[1], 1] for a, b in zip(img0_points, img1_points)])
     # singular value decomposition: C = USV
     u, s, vh = np.linalg.svd(C)
     null_basis_1 = vh[-1]
@@ -47,10 +47,10 @@ def calculate_fundamental_matrix(img0_points, img1_points):
     # Put another way, e∙c = 0, where e = [e11 e12 e13 e21 e22 e23 e31 e32 e33],
     # and c = [bx*ax, bx*ay, bx, by*ax, by*ay, by, ax, ay, 1]
     # e C = [0, 0, 0, 0, 0, 0, 0, 0, 0]
-    C = np.transpose(np.asarray([[b[0]*a[0], b[0]*a[1], b[0], b[1]*a[0], b[1]*a[1], b[1], a[0], a[1], 1] for a, b in zip(img0_points, img1_points)]))
+    C = np.asarray([[b[0]*a[0], b[0]*a[1], b[0], b[1]*a[0], b[1]*a[1], b[1], a[0], a[1], 1] for a, b in zip(img0_points, img1_points)])
     # singular value decomposition: C = USV
     u, s, vh = np.linalg.svd(C)
-    estimated_f = u[:, -1]
+    estimated_f = vh[-1]
     estimated_f = estimated_f.reshape((3, 3))
 
     # enforce that F has two singular values that are 1, and the third is 0
@@ -62,7 +62,7 @@ def calculate_fundamental_matrix(img0_points, img1_points):
     return normalized_estimated_f
 
 
-def calculate_fundamental_matrix_with_ransac(img0_points, img1_points, iterations=1024):
+def calculate_fundamental_matrix_with_ransac(img0_points, img1_points, iterations=128):
     """Calculates the fundamental matrix with points pseudorandomly selected from the given points.
     The matrix with the most matches (inliers) is returned."""
     img0_points = np.asarray(img0_points)
@@ -101,3 +101,48 @@ def fundamental_to_essential_matrix(fundamental_matrix, intrinsic_camera_matrix)
     essential_matrix = np.transpose(intrinsic_camera_matrix) @ fundamental_matrix @ intrinsic_camera_matrix
     normalized_essential_matrix = essential_matrix / np.linalg.norm(essential_matrix)
     return normalized_essential_matrix
+
+
+def calculate_pose_from_essential_matrix(essential_matrix, img0_points, img1_points, intrinsic_camera_matrix):
+    """given an essential matrix, calculates the translation vector (normalized) and the rotation matrix"""
+    global last_calculated_translation
+    u, s, v = np.linalg.svd(essential_matrix)
+    # http://igt.ip.uca.fr/~ab/Classes/DIKU-3DCV2/Handouts/Lecture16.pdf
+    w = np.asarray([[0, -1, 0],
+                    [1, 0, 0],
+                    [0, 0, 1]])
+    possible_rotations = [u @ w @ v, u @ np.transpose(w) @ v]
+    rotation_multiplier = 1 if np.linalg.det(possible_rotations[0]) > 0 else -1
+    possible_rotations = [rotation_multiplier * rotation for rotation in possible_rotations]
+
+    # translation X points right, Y points up, Z points into the image
+    # possible_translations = [u[:, -1], -1*u[:, -1]]
+    possible_translations = [u[:, -1]]
+
+    winning_num_points = 0
+    winning_rotation = None
+    winning_translation = None
+    winning_triangulated_points = None
+    for rotation in possible_rotations:
+        for translation in possible_translations:
+            # The camera matrix describes how the WORLD is transformed relative to the CAMERA
+            # To see the motion of the camera, rotation/translation need to be inverted
+            img0_camera_matrix = intrinsic_camera_matrix @ util.rotation_translation_to_pose(np.identity(3), np.zeros(3))[:3]
+            img1_camera_matrix = intrinsic_camera_matrix @ util.rotation_translation_to_pose(rotation, translation)[:3]
+            triangulated_points = triangulation.triangulate_points_from_pose(img0_camera_matrix,
+                                                                             img1_camera_matrix,
+                                                                             img0_points,
+                                                                             img1_points)
+            camera_2_vector = rotation @ np.asarray([0, 0, 1])
+
+            points_in_front_of_camera_1 = triangulated_points[:, 2] > 0
+            points_in_front_of_camera_2 = np.dot((triangulated_points - translation), camera_2_vector) > 0
+            num_points_in_front_of_camera = np.count_nonzero(np.multiply(points_in_front_of_camera_1, points_in_front_of_camera_2))
+
+            if num_points_in_front_of_camera > winning_num_points:
+                winning_rotation = rotation
+                winning_translation = translation
+                winning_num_points = num_points_in_front_of_camera
+                winning_triangulated_points = triangulated_points
+
+    return util.rotation_translation_to_pose(winning_rotation, winning_translation), winning_triangulated_points

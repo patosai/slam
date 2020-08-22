@@ -84,23 +84,47 @@ def pangolin_draw(points):
 
     while not display.should_quit():
         display.init_frame()
-        for pose in CAMERA_POSES:
+        for idx, pose in enumerate(CAMERA_POSES):
+            is_last_pose = idx == len(CAMERA_POSES) - 1
             homogenous_pose = np.vstack((pose, [0, 0, 0, 1]))
-            display.draw_camera(homogenous_pose, (0.0, 1.0, 0.0))
+            display.draw_camera(homogenous_pose, (0.0, 1.0, 1.0 if is_last_pose else 0.0))
 
         display.draw_points(points)
 
         display.finish_frame()
 
 
-img1 = cv2.imread("data/0000000000.png")
-img2 = cv2.imread("data/0000000003.png")
-rotation, translation, triangulated_points = find_initial_position(img1, img2)
-print("num triangulated points", len(triangulated_points))
+if __name__ == "__main__":
+    plt.ion()
 
-print("camera vector")
-print(rotation @ np.asarray([0, 0, 1]))
-print("translation")
-print(translation)
+    intrinsic_camera_matrix = np.asarray([[1000, 0.000000e+00, 640/2],
+                                          [0.000000e+00, 1000, 360/2],
+                                          [0.000000e+00, 0.000000e+00, 1.000000e+00]])
+    def get_next_frame(cap):
+        for _ in range(10):
+            cap.grab()
+        ret, img = cap.retrieve()
+        grayscale = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        return ret, grayscale
 
-pangolin_draw(triangulated_points)
+
+    cap = cv2.VideoCapture('data/sanfrancisco-cut.mp4')
+    ret, img0 = get_next_frame(cap)
+    ret, img1 = get_next_frame(cap)
+    rotation, translation, triangulated_points = find_initial_position(img0, img1)
+
+    pangolin_draw(triangulated_points)
+
+    # while cap.isOpened():
+    #     img0 = img1
+    #     ret, image = get_next_frame(cap)
+    #     img1 = image
+    #     rotation, translation, triangulated_points = find_initial_position(img0, img1)
+    #     pangolin_draw(triangulated_points)
+    #     plt.draw()
+    #     plt.pause(0.1)
+    # cap.release()
+
+    while True:
+        plt.draw()
+        plt.pause(0.1)
