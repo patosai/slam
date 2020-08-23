@@ -14,6 +14,7 @@ def two_d_to_three_d(pt):
 
 
 def calculate_fundamental_matrix_five_point(img0_points, img1_points):
+    # TODO incomplete
     img0_points = np.asarray(img0_points)
     img1_points = np.asarray(img1_points)
     assert img0_points.shape == img1_points.shape
@@ -54,6 +55,7 @@ def calculate_fundamental_matrix(img0_points, img1_points):
     estimated_f = estimated_f.reshape((3, 3))
 
     # enforce that F has two singular values that are 1, and the third is 0
+    # Tsai and Huang method of setting 3rd singular value of SVD to 0 minimizes the Froebius norm
     u, s, vh = np.linalg.svd(estimated_f)
     estimated_f = u @ np.diag([1, 1, 0]) @ vh
 
@@ -81,7 +83,7 @@ def calculate_fundamental_matrix_with_ransac(img0_points, img1_points, iteration
         random.seed(0x1337BEEF + iteration)
         chosen_indices = random.sample(all_indices, 8)
         fundamental_matrix = calculate_fundamental_matrix(img0_points[chosen_indices], img1_points[chosen_indices])
-        errors = np.square([img1_point @ fundamental_matrix @ img0_point.transpose()
+        errors = np.square([(img1_point @ fundamental_matrix) @ img0_point
                             for img0_point, img1_point in zip(img0_points_with_z, img1_points_with_z)])
         inlier_mask = errors < inlier_error_threshold
         inlier_error = np.sum(errors[inlier_mask])
@@ -105,7 +107,6 @@ def fundamental_to_essential_matrix(fundamental_matrix, intrinsic_camera_matrix)
 
 def calculate_pose_from_essential_matrix(essential_matrix, img0_points, img1_points, intrinsic_camera_matrix):
     """given an essential matrix, calculates the translation vector (normalized) and the rotation matrix"""
-    global last_calculated_translation
     u, s, v = np.linalg.svd(essential_matrix)
     # http://igt.ip.uca.fr/~ab/Classes/DIKU-3DCV2/Handouts/Lecture16.pdf
     w = np.asarray([[0, -1, 0],
@@ -119,7 +120,7 @@ def calculate_pose_from_essential_matrix(essential_matrix, img0_points, img1_poi
     # possible_translations = [u[:, -1], -1*u[:, -1]]
     possible_translations = [u[:, -1]]
 
-    winning_num_points = 0
+    winning_num_points = -1
     winning_rotation = None
     winning_translation = None
     winning_triangulated_points = None

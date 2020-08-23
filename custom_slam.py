@@ -113,7 +113,8 @@ class Slam:
                 img1_point = np.asarray(img1_pts[m["index"]])
                 distance = np.linalg.norm(img0_point - img1_point)
                 # more than 16px parallax
-                if distance > 16:
+                # this seems to make things worse TODO figure out why
+                if True: #distance > 16:
                     good_point_indices.append(len(img0_points))
                 img0_points.append(img0_point)
                 img1_points.append(img1_point)
@@ -266,6 +267,8 @@ if __name__ == "__main__":
     while cap.isOpened():
         img0 = img1
         ret, image = get_next_frame(cap)
+        if ret is False:
+            break
         img1 = image
         slam.find_next_pose(img0, img1)
         plt.draw()
