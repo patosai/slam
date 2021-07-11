@@ -2,8 +2,10 @@
 #
 # Given a set of eight matching points in two images, calculates the essential matrix
 
+import math
 import numpy as np
 import random
+import sympy as sp
 
 from . import logger, triangulation, util
 
@@ -11,22 +13,6 @@ from . import logger, triangulation, util
 def two_d_to_three_d(pt):
     """Given a 2D point in (X, Y), returns a 3D projection of it"""
     return np.asarray([pt[0], pt[1], 1])
-
-
-def calculate_fundamental_matrix_five_point(img0_points, img1_points):
-    # TODO incomplete
-    img0_points = np.asarray(img0_points)
-    img1_points = np.asarray(img1_points)
-    assert img0_points.shape == img1_points.shape
-    assert len(img0_points) >= 5
-
-    C = np.asarray([[b[0]*a[0], b[0]*a[1], b[0], b[1]*a[0], b[1]*a[1], b[1], a[0], a[1], 1] for a, b in zip(img0_points, img1_points)])
-    # singular value decomposition: C = USV
-    u, s, vh = np.linalg.svd(C)
-    null_basis_1 = vh[-1]
-    null_basis_2 = vh[-2]
-    null_basis_3 = vh[-3]
-    null_basis_4 = vh[-4]
 
 
 def calculate_fundamental_matrix(img0_points, img1_points):
@@ -54,17 +40,18 @@ def calculate_fundamental_matrix(img0_points, img1_points):
     estimated_f = vh[-1]
     estimated_f = estimated_f.reshape((3, 3))
 
-    # enforce that F has two singular values that are 1, and the third is 0
-    # Tsai and Huang method of setting 3rd singular value of SVD to 0 minimizes the Froebius norm
-    u, s, vh = np.linalg.svd(estimated_f)
-    estimated_f = u @ np.diag([1, 1, 0]) @ vh
-
     normalized_estimated_f = estimated_f / np.linalg.norm(estimated_f)
 
-    return normalized_estimated_f
+    # enforce that F has two singular values that are 1, and the third is 0
+    # Tsai and Huang method of setting 3rd singular value of SVD to 0 minimizes the Froebius norm
+    u, s, vh = np.linalg.svd(normalized_estimated_f)
+    s[2] = 0
+    final_estimated_f = u @ np.diag(s) @ vh
+
+    return final_estimated_f
 
 
-def calculate_fundamental_matrix_with_ransac(img0_points, img1_points, iterations=128):
+def calculate_fundamental_matrix_with_ransac(img0_points, img1_points, iterations=1000):
     """Calculates the fundamental matrix with points pseudorandomly selected from the given points.
     The matrix with the most matches (inliers) is returned."""
     img0_points = np.asarray(img0_points)
@@ -73,18 +60,18 @@ def calculate_fundamental_matrix_with_ransac(img0_points, img1_points, iteration
     assert len(img0_points) >= 8
 
     all_indices = range(len(img0_points))
-    inlier_error_threshold = 0.005
+    inlier_error_threshold = 0.1
     img0_points_with_z = np.hstack((img0_points, np.ones((len(img0_points), 1))))
     img1_points_with_z = np.hstack((img1_points, np.ones((len(img1_points), 1))))
     max_inliers = -1
     total_inlier_error = None
     max_inlier_matrix = None
-    for iteration in range(iterations):
+    for iteration in range(min(iterations, math.comb(len(img0_points), 8))):
         random.seed(0x1337BEEF + iteration)
         chosen_indices = random.sample(all_indices, 8)
         fundamental_matrix = calculate_fundamental_matrix(img0_points[chosen_indices], img1_points[chosen_indices])
         errors = np.square([(img1_point @ fundamental_matrix) @ img0_point
-                            for img0_point, img1_point in zip(img0_points_with_z, img1_points_with_z)])
+                             for img0_point, img1_point in zip(img0_points_with_z, img1_points_with_z)])
         inlier_mask = errors < inlier_error_threshold
         inlier_error = np.sum(errors[inlier_mask])
         num_inliers = np.count_nonzero(inlier_mask)
@@ -117,8 +104,7 @@ def calculate_pose_from_essential_matrix(essential_matrix, img0_points, img1_poi
     possible_rotations = [rotation_multiplier * rotation for rotation in possible_rotations]
 
     # translation X points right, Y points up, Z points into the image
-    # possible_translations = [u[:, -1], -1*u[:, -1]]
-    possible_translations = [u[:, -1]]
+    possible_translations = [u[:, -1], -1*u[:, -1]]
 
     winning_num_points = -1
     winning_rotation = None
@@ -145,5 +131,6 @@ def calculate_pose_from_essential_matrix(essential_matrix, img0_points, img1_poi
                 winning_translation = translation
                 winning_num_points = num_points_in_front_of_camera
                 winning_triangulated_points = triangulated_points
+    logger.debug("essential matrix - winning num points: %d/%d" % (winning_num_points, len(img0_points)))
 
     return util.rotation_translation_to_pose(winning_rotation, winning_translation), winning_triangulated_points

@@ -97,23 +97,23 @@ def pangolin_draw(points):
 if __name__ == "__main__":
     plt.ion()
 
-    intrinsic_camera_matrix = np.asarray([[1000, 0.000000e+00, 640/2],
-                                          [0.000000e+00, 1000, 360/2],
-                                          [0.000000e+00, 0.000000e+00, 1.000000e+00]])
-    def get_next_frame(cap):
-        for _ in range(10):
-            cap.grab()
-        ret, img = cap.retrieve()
-        grayscale = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        return ret, grayscale
-
-
-    cap = cv2.VideoCapture('data/sanfrancisco-cut.mp4')
-    ret, img0 = get_next_frame(cap)
-    ret, img1 = get_next_frame(cap)
-    rotation, translation, triangulated_points = find_initial_position(img0, img1)
-
-    pangolin_draw(triangulated_points)
+    # intrinsic_camera_matrix = np.asarray([[1000, 0.000000e+00, 640/2],
+    #                                       [0.000000e+00, 1000, 360/2],
+    #                                       [0.000000e+00, 0.000000e+00, 1.000000e+00]])
+    # def get_next_frame(cap):
+    #     for _ in range(10):
+    #         cap.grab()
+    #     ret, img = cap.retrieve()
+    #     grayscale = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    #     return ret, grayscale
+    #
+    #
+    # cap = cv2.VideoCapture('data/sanfrancisco-cut.mp4')
+    # ret, img0 = get_next_frame(cap)
+    # ret, img1 = get_next_frame(cap)
+    # rotation, translation, triangulated_points = find_initial_position(img0, img1)
+    #
+    # pangolin_draw(triangulated_points)
 
     # while cap.isOpened():
     #     img0 = img1
@@ -124,6 +124,14 @@ if __name__ == "__main__":
     #     plt.draw()
     #     plt.pause(0.1)
     # cap.release()
+
+    intrinsic_camera_matrix = np.asarray([[9.842439e+02, 0.000000e+00, 6.900000e+02],
+                                          [0.000000e+00, 9.808141e+02, 2.331966e+02],
+                                          [0.000000e+00, 0.000000e+00, 1.000000e+00]])
+    img0 = cv2.imread("data/0000000001.png")
+    img1 = cv2.imread("data/0000000004.png")
+    rotation, translation, triangulated_points = find_initial_position(img0, img1)
+    pangolin_draw(triangulated_points)
 
     while True:
         plt.draw()

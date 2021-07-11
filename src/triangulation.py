@@ -1,12 +1,8 @@
+import math
 import numpy as np
 import random
 
 from . import logger, plot, util
-
-
-# TODO delete
-import cv2
-import matplotlib.pyplot as plt
 
 
 def triangulate_points_from_pose(img0_camera_matrix, img1_camera_matrix, img0_points, img1_points):
@@ -81,6 +77,7 @@ def triangulate_points_from_pose(img0_camera_matrix, img1_camera_matrix, img0_po
 
 def triangulate_pose_from_points(known_3d_points, image_points, intrinsic_camera_matrix):
     """Triangulate camera pose from known 3D points and 2D matches in the camera image"""
+    # TODO this might not work well because triangulated points might not be that accurate
     assert len(known_3d_points) == len(image_points)
     assert len(known_3d_points) >= 6
     # Similar to above, p = MP, where
@@ -108,20 +105,16 @@ def triangulate_pose_from_points(known_3d_points, image_points, intrinsic_camera
     matrix_variables = vh[-1]
     camera_matrix = matrix_variables.reshape((3, 4))
 
-    result = np.linalg.inv(intrinsic_camera_matrix) @ camera_matrix
-    determinant = np.linalg.det(result[:3, :3])
-    scale_factor = np.cbrt(determinant)
-    result = result / scale_factor
-    rotation = result[:3, :3]
-    translation = result[:, 3]
-    return util.rotation_translation_to_pose(rotation, translation)
+    # we now have P, the camera matrix, P = K[R|T] where K = intrinsic camera matrix, R = rotation, T = translation
+    q, r = np.linalg.qr(camera_matrix[:3, :3])
+    rotation = q
 
-    # decompose left 3x3 matrix with SVD to recover rotation matrix and scale factor
-    # u, s, vh = np.linalg.svd(result[:, :3])
-    # scale_factor = s[0]
-    # rotation = u @ vh
-    # translation = result[:, 3] / scale_factor
-    # return util.rotation_translation_to_pose(rotation, translation)
+    u, s, vh = np.linalg.svd(camera_matrix)
+    homogenous_translation = vh[-1]
+    translation = homogenous_translation[:3] / homogenous_translation[3]
+    assert translation.shape == (3,)
+    return np.vstack((np.hstack((rotation, translation.reshape((3, 1)))),
+                      [[0, 0, 0, 1]]))
 
 
 def triangulate_pose_from_points_with_ransac(previous_camera_pose,
@@ -129,9 +122,14 @@ def triangulate_pose_from_points_with_ransac(previous_camera_pose,
                                              previous_image_points,
                                              image_points,
                                              intrinsic_camera_matrix,
-                                             iterations=128):
+                                             iterations=None):
     assert len(known_3d_points) == len(image_points)
     assert len(known_3d_points) >= 6
+    max_iterations = util.n_choose_r(len(known_3d_points), 6)
+    if iterations is None:
+        iterations = 2048
+    else:
+        iterations = min(iterations, max_iterations)
     all_indices = range(len(image_points))
     known_3d_points = np.asarray(known_3d_points)
     image_points = np.asarray(image_points)
@@ -152,15 +150,14 @@ def triangulate_pose_from_points_with_ransac(previous_camera_pose,
                                                            previous_image_points,
                                                            image_points)
         distances_from_known = np.linalg.norm(known_3d_points - triangulated_points, axis=1)
-        num_good_points = np.count_nonzero(distances_from_known < 0.1)
+        num_good_points = np.count_nonzero(distances_from_known < 0.005)
         error = np.sum(distances_from_known)
         if (num_good_points > winning_num_good_points) or (num_good_points == winning_num_good_points and error < winning_error):
             winning_pose = next_camera_pose
             winning_num_good_points = num_good_points
             winning_error = error
             winning_triangulated_points = triangulated_points
-
-    logger.info("camera triangulation pose - num triangulated points: ", winning_triangulated_points, ", error: ", winning_error)
+    assert winning_pose.shape == (4, 4)
     return winning_pose, winning_triangulated_points
 
 # https://www-users.cs.umn.edu/~hspark/CSci5980/Lec15_PnP.pdf
