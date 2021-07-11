@@ -70,7 +70,7 @@ def calculate_fundamental_matrix_with_ransac(img0_points, img1_points, iteration
         random.seed(0x1337BEEF + iteration)
         chosen_indices = random.sample(all_indices, 8)
         fundamental_matrix = calculate_fundamental_matrix(img0_points[chosen_indices], img1_points[chosen_indices])
-        errors = np.square([(img1_point @ fundamental_matrix) @ img0_point
+        errors = np.square([(img1_point.T @ fundamental_matrix) @ img0_point
                              for img0_point, img1_point in zip(img0_points_with_z, img1_points_with_z)])
         inlier_mask = errors < inlier_error_threshold
         inlier_error = np.sum(errors[inlier_mask])

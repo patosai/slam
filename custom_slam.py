@@ -86,13 +86,27 @@ def find_matches_between_images(img0, img1, orb_detector, show_image_keypoints=F
     return matched_img0_points, matched_img1_points
 
 
+def normalize_points(points):
+    average = np.average(points, axis=0)
+    zeroed_points = points - average
+    distance = np.average(np.linalg.norm(zeroed_points, axis=1))
+    scale_factor = distance/np.sqrt(2)
+    translation_matrix = np.asarray([[scale_factor, 0, -1*scale_factor*average[0]],
+                                     [0, scale_factor, -1*scale_factor*average[1]],
+                                     [0, 0, 1]])
+    return zeroed_points/scale_factor, translation_matrix
+
+
 def retrieve_pose_and_triangulated_points(img0, img1, intrinsic_camera_matrix, orb_detector, show_image_keypoints=False):
     img0_points, img1_points = find_matches_between_images(img0, img1, orb_detector, show_image_keypoints=show_image_keypoints)
-    # fundamental_matrix = epipolar.calculate_fundamental_matrix_with_ransac(img0_points, img1_points)
-    fundamental_matrix = epipolar.calculate_fundamental_matrix(img0_points, img1_points)
+
+    normalized_img0_points, img0_translation_matrix = normalize_points(img0_points)
+    normalized_img1_points, img1_translation_matrix = normalize_points(img1_points)
+
+    fundamental_matrix = epipolar.calculate_fundamental_matrix_with_ransac(normalized_img0_points, normalized_img1_points)
+    fundamental_matrix = img1_translation_matrix.T @ fundamental_matrix @ img0_translation_matrix
+
     essential_matrix = epipolar.fundamental_to_essential_matrix(fundamental_matrix, intrinsic_camera_matrix)
-    print("essential matrix")
-    print(essential_matrix)
     camera_2_pose, triangulated_points = epipolar.calculate_pose_from_essential_matrix(essential_matrix,
                                                                                        img0_points,
                                                                                        img1_points,
