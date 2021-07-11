@@ -1,4 +1,4 @@
-![Image showing two cameras and triangulated points](slam.png)
+![Example SLAM result](slam.jpg)
 
 Uses OpenCV, numpy, and [Pangolin](https://github.com/uoip/pangolin)
 

@@ -129,7 +129,7 @@ if __name__ == "__main__":
                                           [0.000000e+00, 9.808141e+02, 2.331966e+02],
                                           [0.000000e+00, 0.000000e+00, 1.000000e+00]])
     img0 = cv2.imread("data/0000000001.png")
-    img1 = cv2.imread("data/0000000004.png")
+    img1 = cv2.imread("data/0000000002.png")
     rotation, translation, triangulated_points = find_initial_position(img0, img1)
     pangolin_draw(triangulated_points)
 

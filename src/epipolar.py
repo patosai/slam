@@ -60,7 +60,7 @@ def calculate_fundamental_matrix_with_ransac(img0_points, img1_points, iteration
     assert len(img0_points) >= 8
 
     all_indices = range(len(img0_points))
-    inlier_error_threshold = 0.1
+    inlier_error_threshold = 0.005
     img0_points_with_z = np.hstack((img0_points, np.ones((len(img0_points), 1))))
     img1_points_with_z = np.hstack((img1_points, np.ones((len(img1_points), 1))))
     max_inliers = -1

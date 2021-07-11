@@ -68,10 +68,8 @@ def find_matches_between_images(img0, img1, orb_detector, show_image_keypoints=F
         # Lowe's ratio test
         first_match_much_better = m["distance"] < 0.5 * n["distance"]
         if first_match_much_better:
-            pixel_distance = np.linalg.norm(img0_pts[idx] - img1_pts[m["index"]])
-            if pixel_distance > 16:
-                matched_img0_points.append(img0_pts[idx])
-                matched_img1_points.append(img1_pts[m["index"]])
+            matched_img0_points.append(img0_pts[idx])
+            matched_img1_points.append(img1_pts[m["index"]])
     assert len(matched_img0_points) == len(matched_img1_points)
     matched_img0_points = np.asarray(matched_img0_points)
     matched_img1_points = np.asarray(matched_img1_points)
