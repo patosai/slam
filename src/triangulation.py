@@ -112,8 +112,13 @@ def triangulate_pose_from_points(known_3d_points, image_points, intrinsic_camera
     u, s, vh = np.linalg.svd(camera_matrix)
     homogenous_translation = vh[-1]
     translation = homogenous_translation[:3] / homogenous_translation[3]
+
     assert translation.shape == (3,)
-    return np.vstack((np.hstack((rotation, translation.reshape((3, 1)))),
+    # camera_matrix = np.vstack((np.hstack((rotation, translation.reshape((3, 1)))),
+    #                            [[0, 0, 0, 1]]))
+    camera_matrix = np.hstack((rotation, translation.reshape((3, 1))))
+    # TODO don't do this inversion too much
+    return np.vstack((np.linalg.inv(intrinsic_camera_matrix) @ camera_matrix,
                       [[0, 0, 0, 1]]))
 
 
@@ -122,14 +127,11 @@ def triangulate_pose_from_points_with_ransac(previous_camera_pose,
                                              previous_image_points,
                                              image_points,
                                              intrinsic_camera_matrix,
-                                             iterations=None):
+                                             iterations=100):
     assert len(known_3d_points) == len(image_points)
     assert len(known_3d_points) >= 6
-    max_iterations = util.n_choose_r(len(known_3d_points), 6)
-    if iterations is None:
-        iterations = 2048
-    else:
-        iterations = min(iterations, max_iterations)
+    max_iterations = math.comb(len(known_3d_points), 6)
+    iterations = min(iterations, max_iterations)
     all_indices = range(len(image_points))
     known_3d_points = np.asarray(known_3d_points)
     image_points = np.asarray(image_points)

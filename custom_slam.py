@@ -12,6 +12,7 @@ from src import display, epipolar, logger, plot, triangulation, util
 
 def match_knn_brute_force(img0_descriptors, img1_descriptors, num_matches):
     """Finds k nearest descriptors in img1 for each descriptor in img0, using brute force"""
+    # TODO no O(n^2) algo pls
     matches = []
     for img0_idx, img0_descriptor in enumerate(img0_descriptors):
         possible_matches = []
@@ -25,11 +26,7 @@ def match_knn_brute_force(img0_descriptors, img1_descriptors, num_matches):
 
 
 def match_knn_flann(img0_descriptors, img1_descriptors, flann_matcher, num_matches=2):
-    # if flann_matcher is None:
-    #     FLANN_INDEX_LSH = 6
-    #     index_params = dict(algorithm=FLANN_INDEX_LSH, trees=5)
-    #     search_params = dict(checks=50)
-    #     flann_matcher = cv2.FlannBasedMatcher(index_params, search_params)
+    # TODO why is this slow?
     matches = flann_matcher.knnMatch(img0_descriptors, img1_descriptors, k=num_matches)
     return [[{"distance": m.distance, "index": m.trainIdx},
              {"distance": n.distance, "index": n.trainIdx}]
@@ -95,15 +92,18 @@ def normalize_points(points):
     return zeroed_points/scale_factor, translation_matrix
 
 
-def retrieve_pose_and_triangulated_points(img0, img1, intrinsic_camera_matrix, orb_detector, show_image_keypoints=False):
-    img0_points, img1_points = find_matches_between_images(img0, img1, orb_detector, show_image_keypoints=show_image_keypoints)
-
+def normalize_points_and_find_fundamental_matrix(img0_points, img1_points):
     normalized_img0_points, img0_translation_matrix = normalize_points(img0_points)
     normalized_img1_points, img1_translation_matrix = normalize_points(img1_points)
 
     fundamental_matrix = epipolar.calculate_fundamental_matrix_with_ransac(normalized_img0_points, normalized_img1_points)
     fundamental_matrix = img1_translation_matrix.T @ fundamental_matrix @ img0_translation_matrix
+    return fundamental_matrix
 
+
+def find_pose_and_triangulated_points(img0, img1, intrinsic_camera_matrix, orb_detector, show_image_keypoints=False):
+    img0_points, img1_points = find_matches_between_images(img0, img1, orb_detector, show_image_keypoints=show_image_keypoints)
+    fundamental_matrix = normalize_points_and_find_fundamental_matrix(img0_points, img1_points)
     essential_matrix = epipolar.fundamental_to_essential_matrix(fundamental_matrix, intrinsic_camera_matrix)
     camera_2_pose, triangulated_points = epipolar.calculate_pose_from_essential_matrix(essential_matrix,
                                                                                        img0_points,
@@ -124,6 +124,8 @@ class Slam:
         self.pyplot_subplots = None
         self.visualization_stop_event = None
         self.visualization_thread = None
+
+        self.latest_image_2d_points = None
 
         self.camera_poses = None
         self.triangulated_point_lookup = None
@@ -186,7 +188,7 @@ class Slam:
             with self.visualization_lock:
                 if len(self.camera_poses) > 0:
                     for idx, pose in enumerate(self.camera_poses):
-                        color = (0.0, 1.0, 1.0) if idx == len(self.camera_poses)-1 else (0.0, 1.0, 0.0)
+                        color = (0.0, 1.0, 0.0) if idx == len(self.camera_poses)-1 else (0.0, 1.0, 1.0)
                         display.draw_camera(pose, color)
 
                 if self.all_triangulated_points is not None:
@@ -195,28 +197,76 @@ class Slam:
             display.finish_frame()
 
     def find_initial_pose(self, img0, img1):
-        """takes the first two images and finds the relative locations of the cameras"""
+        """takes two images, finds the relative locations of the cameras (up to a scale factor), and finds triangulated points"""
         logger.info("-----------------------")
         logger.info("Finding initial pose...")
 
         self.reset()
 
-        camera_pose, points2d, points3d, good_points_mask = retrieve_pose_and_triangulated_points(img0,
-                                                                                                  img1,
-                                                                                                  self.intrinsic_camera_matrix,
-                                                                                                  self.orb_detector,
-                                                                                                  show_image_keypoints=True)
+        current_frame_num = self.current_frame_num()
+        camera_pose, points2d, points3d, good_points_mask = find_pose_and_triangulated_points(img0,
+                                                                                              img1,
+                                                                                              self.intrinsic_camera_matrix,
+                                                                                              self.orb_detector,
+                                                                                              show_image_keypoints=self.show_image_keypoints)
 
-        logger.info("First pose - translation: ", util.pose_to_translation(camera_pose), ", camera vector: ", util.pose_to_rotation(camera_pose) @ [0, 0, 1])
+        logger.info("Translation: ", util.pose_to_translation(camera_pose), ", camera vector: ", util.pose_to_rotation(camera_pose) @ [0, 0, 1])
 
         for idx, is_good in enumerate(good_points_mask):
             if is_good:
                 image_0_point = tuple(points2d[0][idx])
                 image_1_point = tuple(points2d[1][idx])
-                self.set_triangulated_point(0, image_0_point, points3d[idx])
-                self.set_triangulated_point(1, image_1_point, points3d[idx])
+                self.set_triangulated_point(current_frame_num, image_0_point, points3d[idx])
+                self.set_triangulated_point(current_frame_num + 1, image_1_point, points3d[idx])
         self.add_triangulated_points_to_viz(points3d[good_points_mask])
         self.add_camera_pose(camera_pose)
+        self.latest_image_2d_points = points2d[1]
+
+    def find_next_pose(self, img0, img1):
+        logger.info("-----------------------")
+        logger.info("Finding next pose...")
+        current_frame_num = self.current_frame_num()
+        camera_pose, points2d, points3d, good_points_mask = find_pose_and_triangulated_points(img0,
+                                                                                              img1,
+                                                                                              self.intrinsic_camera_matrix,
+                                                                                              self.orb_detector,
+                                                                                              show_image_keypoints=self.show_image_keypoints)
+        # use previously triangulated points to retrieve scale
+        assert(self.latest_image_2d_points is not None)
+        previous_image_2d_points = set([tuple(point) for point in self.latest_image_2d_points])
+        img0_localization_pts = []
+        img1_localization_pts = []
+        for idx, point in enumerate(points2d[0]):
+            if tuple(point) in previous_image_2d_points:
+                img0_localization_pts.append(point)
+                img1_localization_pts.append(points2d[1][idx])
+        known_3d_points = [self.get_triangulated_point(current_frame_num, tuple(point))
+                           for point in img0_localization_pts]
+
+        img0_localization_pts = [point
+                                 for idx, point in enumerate(img0_localization_pts)
+                                 if known_3d_points[idx] is not None]
+        img1_localization_pts = [point
+                                 for idx, point in enumerate(img1_localization_pts)
+                                 if known_3d_points[idx] is not None]
+        known_3d_points = [point for point in known_3d_points if point is not None]
+        print("img0 pts")
+        print(img0_localization_pts)
+        print("img1 pts")
+        print(img1_localization_pts)
+        print(known_3d_points)
+        if len(known_3d_points) < 6:
+            raise Exception("fewer than 6 points found, cannot retrieve scale")
+        else:
+            # TODO: lots of error here, normalization needed?
+            retrieved_pose, retrieved_triangulated_points = triangulation.triangulate_pose_from_points_with_ransac(self.get_latest_camera_pose(),
+                                                                                                                   known_3d_points,
+                                                                                                                   np.asarray(img0_localization_pts),
+                                                                                                                   np.asarray(img1_localization_pts),
+                                                                                                                   self.intrinsic_camera_matrix)
+            logger.info("Retrieved pose translation: ", util.pose_to_translation(retrieved_pose), ", camera vector: ", util.pose_to_rotation(retrieved_pose) @ [0, 0, 1])
+
+            logger.info("Translation: ", util.pose_to_translation(camera_pose), ", camera vector: ", util.pose_to_rotation(camera_pose) @ [0, 0, 1])
 
 
 def main():
@@ -232,6 +282,9 @@ def main():
     img1 = cv2.imread("data/0000000002.png")
 
     slam.find_initial_pose(img0, img1)
+
+    img2 = cv2.imread("data/0000000004.png")
+    slam.find_next_pose(img1, img2)
 
 
     # def get_next_frame(cap):

@@ -37,14 +37,6 @@ def rotation_translation_to_pose(rotation, translation):
                       [0, 0, 0, 1]))
 
 
-def n_choose_r(n, r):
-    """Copied from https://stackoverflow.com/a/4941932/4167156"""
-    r = min(r, n-r)
-    numer = reduce(op.mul, range(n, n-r, -1), 1)
-    denom = reduce(op.mul, range(1, r+1), 1)
-    return numer // denom  # or / in Python 2
-
-
 def collect_symbolic_equation_with_respect_to_vars(eq, vars):
     assert isinstance(vars, list)
     eq = eq.expand()

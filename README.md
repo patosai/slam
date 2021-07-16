@@ -18,3 +18,9 @@ Current status
 =======
 - Initial establishment of camera position and triangulated points complete
 - Next steps: localize camera in future frames and project other keypoints
+
+Future upgrades
+=======
+- Use the 5-point algorithm (Li/Hartley or Lui/Drummond) instead of the 8-point algorithm, once I figure out how they work...
+- Loop closure
+- Speed things up. Possible areas of slowdown: RANSAC, 8-point algorithm, ORB keypoint matching

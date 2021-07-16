@@ -99,7 +99,7 @@ def calculate_pose_from_essential_matrix(essential_matrix, img0_points, img1_poi
     w = np.asarray([[0, -1, 0],
                     [1, 0, 0],
                     [0, 0, 1]])
-    possible_rotations = [u @ w @ v, u @ np.transpose(w) @ v]
+    possible_rotations = [u @ w @ v, u @ w.T @ v]
     rotation_multiplier = 1 if np.linalg.det(possible_rotations[0]) > 0 else -1
     possible_rotations = [rotation_multiplier * rotation for rotation in possible_rotations]
 
