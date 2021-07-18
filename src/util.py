@@ -37,6 +37,11 @@ def rotation_translation_to_pose(rotation, translation):
                       [0, 0, 0, 1]))
 
 
+def point_distance(pt1, pt2):
+    """Accepts two points of any dimension and computes their Euclidean distance"""
+    return np.linalg.norm(pt1 - pt2)
+
+
 def collect_symbolic_equation_with_respect_to_vars(eq, vars):
     assert isinstance(vars, list)
     eq = eq.expand()

@@ -43,7 +43,7 @@ def triangulate_points_from_pose(img0_camera_matrix, img1_camera_matrix, img0_po
     #          -M'_1 + vM'_2,
     #          M'_0 - u'M'_2]
     # DP = 0. SVD can be applied to solve for P.
-    # letting SVD(D) = USV, P can be found by taking the vector of U associated with the smallest singular value in S.
+    # letting SVD(D) = U*S*V, P can be found by taking the vector of U associated with the smallest singular value in S.
 
     triangulated_points = []
     for img0_pt, img1_pt in zip(img0_points, img1_points):
