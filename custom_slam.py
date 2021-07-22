@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import cv2
+import itertools
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
@@ -241,29 +242,40 @@ class Slam:
         prev_image_prev_points = set([tuple(point) for point in self.latest_image_2d_points])
         prev_image_matching_points = []
         new_image_matching_points = []
+        old_3d_points = []
         matching_points_3d = []
         for idx, point in enumerate(points2d[0]):
             if tuple(point) in prev_image_prev_points:
                 prev_image_matching_points.append(point)
                 new_image_matching_points.append(points2d[1][idx])
+                old_3d_points.append(self.get_triangulated_point(current_frame_num, tuple(point)))
                 matching_points_3d.append(points3d[idx])
+        old_3d_points = np.array(old_3d_points)
+        matching_points_3d = np.array(matching_points_3d)
         match_data = [{"previous_point": prev_point,
                        "next_point": new_image_matching_points[idx],
                        "point_movement": util.point_distance(prev_point, new_image_matching_points[idx]),
                        "3d_point": self.get_triangulated_point(current_frame_num, tuple(prev_point)),
                        "new_3d_point": matching_points_3d[idx]}
                       for idx, prev_point in enumerate(prev_image_matching_points)]
-        # TODO sort should take into account movement of camera
         match_data.sort(key=lambda x: util.point_distance(x["3d_point"], x["new_3d_point"]))
+
+        camera_translation = util.pose_to_translation(camera_pose)
+        camera_rotation = util.pose_to_rotation(camera_pose)
         # try using these matches to estimate scale
-        # TODO just use the first 2 for now for crappy estimation; use weighted average later
-        scale = util.point_distance(match_data[1]["3d_point"], match_data[0]["3d_point"])/util.point_distance(match_data[1]["new_3d_point"], match_data[0]["new_3d_point"])
-        print(util.point_distance(match_data[1]["3d_point"], match_data[0]["3d_point"]))
-        print(util.point_distance(match_data[1]["new_3d_point"], match_data[0]["new_3d_point"]))
-        print(scale)
-        new_translation = util.pose_to_translation(camera_pose) * scale
-        rotation = util.pose_to_rotation(camera_pose)
-        new_camera_pose = util.rotation_translation_to_pose(rotation, new_translation)
+        max_inliers = -1
+        max_inlier_scale = 0
+        for a, b in itertools.combinations(match_data[:6], 2):
+            scale = util.point_distance(a["3d_point"], b["3d_point"])/util.point_distance(a["new_3d_point"], b["new_3d_point"])
+            matching_points_3d_in_original_coordinates = (camera_rotation @ (matching_points_3d * scale).T).T - (camera_translation * scale)
+            distances = np.linalg.norm(old_3d_points - matching_points_3d_in_original_coordinates, axis=1)
+            print(distances)
+            this_scale_num_inliers = np.count_nonzero(distances < 5)
+            if this_scale_num_inliers > max_inliers:
+                max_inliers = this_scale_num_inliers
+                max_inlier_scale = scale
+        logger.info("Found scale, ", max_inlier_scale, "max inliers: ", max_inliers)
+        new_camera_pose = util.rotation_translation_to_pose(camera_rotation, camera_translation * max_inlier_scale)
         next_camera_pose = self.get_latest_camera_pose() @ new_camera_pose
         self.log_camera_pose(next_camera_pose)
         self.add_camera_pose(next_camera_pose)
