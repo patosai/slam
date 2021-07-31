@@ -75,7 +75,7 @@ def triangulate_points_from_pose(img0_camera_matrix, img1_camera_matrix, img0_po
     return triangulated_points
 
 
-def triangulate_pose_from_points(known_3d_points, image_points, intrinsic_camera_matrix):
+def triangulate_pose_from_points(image_points, known_3d_points, intrinsic_camera_matrix):
     """Triangulate camera pose from known 3D points and 2D matches in the camera image"""
     # TODO this might not work well because triangulated points might not be that accurate
     assert len(known_3d_points) == len(image_points)
@@ -104,63 +104,79 @@ def triangulate_pose_from_points(known_3d_points, image_points, intrinsic_camera
     u, s, vh = np.linalg.svd(a)
     matrix_variables = vh[-1]
     camera_matrix = matrix_variables.reshape((3, 4))
+    camera_matrix = camera_matrix / camera_matrix[-1, -1]
 
-    # we now have P, the camera matrix, P = K[R|T] where K = intrinsic camera matrix, R = rotation, T = translation
-    q, r = np.linalg.qr(camera_matrix[:3, :3])
-    rotation = q
+    # https://www.uio.no/studier/emner/matnat/its/nedlagte-emner/UNIK4690/v17/forelesninger/lecture_5_2_pose_from_known_3d_points.pdf
+    # P = K[R|t]
+    #   = K[R|-RC]
+    # P = [M|-MC]
+    # To calculate rotation, do RQ decomposition. R is a right triangular matrix (intrinsic camera matrix), Q is an orthogonal matrix (rotation matrix)
+    # M = KR
+    # To calculate translation, PC = 0
+    # Do SVD; C is the right singular vector corresponding to smallest singular value
 
-    u, s, vh = np.linalg.svd(camera_matrix)
-    homogenous_translation = vh[-1]
-    translation = homogenous_translation[:3] / homogenous_translation[3]
-
-    assert translation.shape == (3,)
-    # camera_matrix = np.vstack((np.hstack((rotation, translation.reshape((3, 1)))),
-    #                            [[0, 0, 0, 1]]))
-    camera_matrix = np.hstack((rotation, translation.reshape((3, 1))))
-    # TODO don't do this inversion too much
-    return np.vstack((np.linalg.inv(intrinsic_camera_matrix) @ camera_matrix,
-                      [[0, 0, 0, 1]]))
+    print("camera matrix")
+    print(camera_matrix[:3, :3])
+    print(camera_matrix)
+    r, q = util.rq_decomposition(camera_matrix[:3, :3])
+    print("r")
+    print(r)
+    print("q")
+    print(q)
+    # enforce positive diagonal of K
+    diagonal = np.diag(np.sign(np.diag(q)))
+    k = r @ diagonal
+    k = k / k[-1,-1]
+    rotation = diagonal @ q
+    translation = np.linalg.inv(intrinsic_camera_matrix) @ camera_matrix[:, -1]
+    print("rotation")
+    print(rotation)
+    print("translation")
+    print(translation)
+    return util.rotation_translation_to_pose(rotation, translation)
 
 
 def triangulate_pose_from_points_with_ransac(previous_camera_pose,
-                                             known_3d_points,
-                                             previous_image_points,
-                                             image_points,
+                                             matching_previous_image_points_with_3d_position,
+                                             matching_next_image_points_with_3d_position,
+                                             matching_3d_points,
+                                             matching_previous_image_points,
+                                             matching_next_image_points,
                                              intrinsic_camera_matrix,
                                              iterations=100):
-    assert len(known_3d_points) == len(image_points)
-    assert len(known_3d_points) >= 6
-    max_iterations = math.comb(len(known_3d_points), 6)
+    assert len(matching_previous_image_points_with_3d_position) == len(matching_next_image_points_with_3d_position) == len(matching_3d_points)
+    assert len(matching_3d_points) >= 6
+    max_iterations = math.comb(len(matching_3d_points), 6)
     iterations = min(iterations, max_iterations)
-    all_indices = range(len(image_points))
-    known_3d_points = np.asarray(known_3d_points)
-    image_points = np.asarray(image_points)
+    all_indices = range(len(matching_next_image_points_with_3d_position))
 
     winning_pose = None
     winning_num_good_points = -1
     winning_error = None
-    winning_triangulated_points = None
 
     for iteration in range(iterations):
         random.seed(0x1337BEEF + iteration)
         chosen_indices = random.sample(all_indices, 6)
-        next_camera_pose = triangulate_pose_from_points(known_3d_points[chosen_indices],
-                                                        image_points[chosen_indices],
+        next_camera_pose = triangulate_pose_from_points(matching_next_image_points_with_3d_position[chosen_indices],
+                                                        matching_3d_points[chosen_indices],
                                                         intrinsic_camera_matrix)
         triangulated_points = triangulate_points_from_pose(previous_camera_pose,
                                                            next_camera_pose,
-                                                           previous_image_points,
-                                                           image_points)
-        distances_from_known = np.linalg.norm(known_3d_points - triangulated_points, axis=1)
-        num_good_points = np.count_nonzero(distances_from_known < 0.005)
+                                                           matching_previous_image_points_with_3d_position,
+                                                           matching_next_image_points_with_3d_position)
+        distances_from_known = np.linalg.norm(matching_3d_points - triangulated_points, axis=1)
+        num_good_points = np.count_nonzero(distances_from_known < 1)
         error = np.sum(distances_from_known)
         if (num_good_points > winning_num_good_points) or (num_good_points == winning_num_good_points and error < winning_error):
             winning_pose = next_camera_pose
             winning_num_good_points = num_good_points
             winning_error = error
-            winning_triangulated_points = triangulated_points
+    logger.info("Pose from points, num good points: ", winning_num_good_points, "/", len(matching_3d_points))
     assert winning_pose.shape == (4, 4)
-    return winning_pose, winning_triangulated_points
+    return winning_pose, triangulate_points_from_pose(previous_camera_pose,
+                                                      winning_pose,
+                                                      matching_previous_image_points,
+                                                      matching_next_image_points)
 
 # https://www-users.cs.umn.edu/~hspark/CSci5980/Lec15_PnP.pdf
 
@@ -185,7 +201,7 @@ if __name__ == "__main__":
     intrinsic_camera_matrix = np.asarray([[9.842439e+02, 0.000000e+00, 6.900000e+02],
                                           [0.000000e+00, 9.808141e+02, 2.331966e+02],
                                           [0.000000e+00, 0.000000e+00, 1.000000e+00]])
-    pose = triangulate_pose_from_points(known_3d_points, image_points, intrinsic_camera_matrix)
+    pose = triangulate_pose_from_points(image_points, known_3d_points, intrinsic_camera_matrix)
     print(pose)
     print(util.pose_to_translation(pose))
     print(util.pose_to_rotation(pose))

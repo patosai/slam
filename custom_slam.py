@@ -230,56 +230,29 @@ class Slam:
         logger.info("-----------------------")
         logger.info("Finding next pose...")
         current_frame_num = self.current_frame_num()
-        camera_pose, points2d, points3d, good_points_mask = find_pose_and_triangulated_points(prev_image,
-                                                                                              new_image,
-                                                                                              self.intrinsic_camera_matrix,
-                                                                                              self.orb_detector,
-                                                                                              show_image_keypoints=self.show_image_keypoints)
-        # TODO use bundle adjustment once I figure out how that works
+        latest_camera_pose = self.get_latest_camera_pose()
+        prev_image_points, new_image_points = find_matches_between_images(prev_image,
+                                                                          new_image,
+                                                                          self.orb_detector,
+                                                                          show_image_keypoints=self.show_image_keypoints)
 
-        # use previously triangulated points to retrieve scale
-        assert(self.latest_image_2d_points is not None)
-        prev_image_prev_points = set([tuple(point) for point in self.latest_image_2d_points])
-        prev_image_matching_points = []
-        new_image_matching_points = []
-        old_3d_points = []
-        matching_points_3d = []
-        for idx, point in enumerate(points2d[0]):
-            if tuple(point) in prev_image_prev_points:
-                prev_image_matching_points.append(point)
-                new_image_matching_points.append(points2d[1][idx])
-                old_3d_points.append(self.get_triangulated_point(current_frame_num, tuple(point)))
-                matching_points_3d.append(points3d[idx])
-        old_3d_points = np.array(old_3d_points)
-        matching_points_3d = np.array(matching_points_3d)
-        match_data = [{"previous_point": prev_point,
-                       "next_point": new_image_matching_points[idx],
-                       "point_movement": util.point_distance(prev_point, new_image_matching_points[idx]),
-                       "3d_point": self.get_triangulated_point(current_frame_num, tuple(prev_point)),
-                       "new_3d_point": matching_points_3d[idx]}
-                      for idx, prev_point in enumerate(prev_image_matching_points)]
-        match_data.sort(key=lambda x: util.point_distance(x["3d_point"], x["new_3d_point"]))
-
-        camera_translation = util.pose_to_translation(camera_pose)
-        camera_rotation = util.pose_to_rotation(camera_pose)
-        # try using these matches to estimate scale
-        max_inliers = -1
-        max_inlier_scale = 0
-        for a, b in itertools.combinations(match_data[:6], 2):
-            scale = util.point_distance(a["3d_point"], b["3d_point"])/util.point_distance(a["new_3d_point"], b["new_3d_point"])
-            matching_points_3d_in_original_coordinates = (camera_rotation @ (matching_points_3d * scale).T).T - (camera_translation * scale)
-            distances = np.linalg.norm(old_3d_points - matching_points_3d_in_original_coordinates, axis=1)
-            print(distances)
-            this_scale_num_inliers = np.count_nonzero(distances < 5)
-            if this_scale_num_inliers > max_inliers:
-                max_inliers = this_scale_num_inliers
-                max_inlier_scale = scale
-        logger.info("Found scale, ", max_inlier_scale, "max inliers: ", max_inliers)
-        new_camera_pose = util.rotation_translation_to_pose(camera_rotation, camera_translation * max_inlier_scale)
-        next_camera_pose = self.get_latest_camera_pose() @ new_camera_pose
-        self.log_camera_pose(next_camera_pose)
-        self.add_camera_pose(next_camera_pose)
-        # TODO add points
+        matches_with_3d_points = []
+        for prev_point, new_point in zip(prev_image_points, new_image_points):
+            point_3d = self.get_triangulated_point(current_frame_num, prev_point)
+            if point_3d is not None:
+                matches_with_3d_points.append({"prev_point": prev_point,
+                                               "new_point": new_point,
+                                               "3d_point": point_3d})
+        relative_pose, relative_points = triangulation.triangulate_pose_from_points_with_ransac(latest_camera_pose,
+                                                                                                np.array([match["prev_point"] for match in matches_with_3d_points]),
+                                                                                                np.array([match["new_point"] for match in matches_with_3d_points]),
+                                                                                                np.array([match["3d_point"] for match in matches_with_3d_points]),
+                                                                                                prev_image_points,
+                                                                                                new_image_points,
+                                                                                                self.intrinsic_camera_matrix)
+        latest_pose = latest_camera_pose @ relative_pose
+        self.log_camera_pose(latest_pose)
+        self.add_camera_pose(latest_pose)
 
 
 def main():

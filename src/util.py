@@ -55,3 +55,12 @@ def collect_symbolic_equation_with_respect_to_vars(eq, vars):
         for sub_var_power in sub_var_map:
             final_var_map[var_power*sub_var_power] = sub_var_map[sub_var_power]
     return final_var_map
+
+
+def rq_decomposition(m):
+    matrix_reverser = np.rot90(np.diag(np.ones(m.shape[0])))
+    m_prime = matrix_reverser @ m
+    q_prime, r_prime = np.linalg.qr(m_prime)
+    q = matrix_reverser @ q_prime.T
+    r = matrix_reverser @ r_prime.T @ matrix_reverser
+    return r, q
