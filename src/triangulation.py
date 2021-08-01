@@ -104,7 +104,6 @@ def triangulate_pose_from_points(image_points, known_3d_points, intrinsic_camera
     u, s, vh = np.linalg.svd(a)
     matrix_variables = vh[-1]
     camera_matrix = matrix_variables.reshape((3, 4))
-    camera_matrix = camera_matrix / camera_matrix[-1, -1]
 
     # https://www.uio.no/studier/emner/matnat/its/nedlagte-emner/UNIK4690/v17/forelesninger/lecture_5_2_pose_from_known_3d_points.pdf
     # P = K[R|t]
@@ -112,8 +111,7 @@ def triangulate_pose_from_points(image_points, known_3d_points, intrinsic_camera
     # P = [M|-MC]
     # To calculate rotation, do RQ decomposition. R is a right triangular matrix (intrinsic camera matrix), Q is an orthogonal matrix (rotation matrix)
     # M = KR
-    # To calculate translation, PC = 0
-    # Do SVD; C is the right singular vector corresponding to smallest singular value
+    # To calculate translation, K^(-1) * P[last row] = t
 
     print("camera matrix")
     print(camera_matrix[:3, :3])
@@ -125,8 +123,6 @@ def triangulate_pose_from_points(image_points, known_3d_points, intrinsic_camera
     print(q)
     # enforce positive diagonal of K
     diagonal = np.diag(np.sign(np.diag(q)))
-    k = r @ diagonal
-    k = k / k[-1,-1]
     rotation = diagonal @ q
     translation = np.linalg.inv(intrinsic_camera_matrix) @ camera_matrix[:, -1]
     print("rotation")
