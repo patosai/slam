@@ -98,33 +98,33 @@ def triangulate_pose_from_points(image_points, known_3d_points, intrinsic_camera
     equations = [[[0, 0, 0, 0, -x, -y, -z, -1, v*x, v*y, v*z, v],
                   [x, y, z, 1, 0, 0, 0, 0, -u*x, -u*y, -u*z, -u]]
                  for [u, v], [x, y, z] in zip(image_points, known_3d_points)]
-    # TODO pretty sure coordinate normalization needs to happen, otherwise big error happens
-    a = np.concatenate(equations, axis=0)
-    # once again, use SVD to find x; it's the column in V corresponding to the smallest singular value
-    u, s, vh = np.linalg.svd(a)
-    matrix_variables = vh[-1]
-    camera_matrix = matrix_variables.reshape((3, 4))
 
     # https://www.uio.no/studier/emner/matnat/its/nedlagte-emner/UNIK4690/v17/forelesninger/lecture_5_2_pose_from_known_3d_points.pdf
     # P = K[R|t]
     #   = K[R|-RC]
     # P = [M|-MC]
+    # Calculate camera center C by taking SVD of P, since PC = 0
     # To calculate rotation, do RQ decomposition. R is a right triangular matrix (intrinsic camera matrix), Q is an orthogonal matrix (rotation matrix)
-    # M = KR
-    # To calculate translation, K^(-1) * P[last row] = t
+    # To calculate translation, t = -RC
 
-    print("camera matrix")
-    print(camera_matrix[:3, :3])
-    print(camera_matrix)
+    a = np.concatenate(equations, axis=0)
+    # once again, use SVD to find x; it's the column in V corresponding to the smallest singular value
+    u, s, vh = np.linalg.svd(a)
+    matrix_variables = vh[-1]
+    camera_matrix = matrix_variables.reshape((3, 4))
+    camera_matrix = camera_matrix * np.sign(np.linalg.det(camera_matrix[:3, :3]))
+
+    u, s, vh = np.linalg.svd(camera_matrix)
+    camera_center = vh[-1, :3] / vh[-1, -1]
+
     r, q = util.rq_decomposition(camera_matrix[:3, :3])
-    print("r")
-    print(r)
-    print("q")
-    print(q)
     # enforce positive diagonal of K
-    diagonal = np.diag(np.sign(np.diag(q)))
+    diagonal = np.diag(np.sign(np.diag(r)))
+    calculated_intrinsic_camera_matrix = r @ diagonal
     rotation = diagonal @ q
-    translation = np.linalg.inv(intrinsic_camera_matrix) @ camera_matrix[:, -1]
+    translation = -1 * rotation @ camera_center
+    print("calculated intrinsic camera matrix")
+    print(calculated_intrinsic_camera_matrix)
     print("rotation")
     print(rotation)
     print("translation")
@@ -156,16 +156,23 @@ def triangulate_pose_from_points_with_ransac(previous_camera_pose,
         next_camera_pose = triangulate_pose_from_points(matching_next_image_points_with_3d_position[chosen_indices],
                                                         matching_3d_points[chosen_indices],
                                                         intrinsic_camera_matrix)
-        triangulated_points = triangulate_points_from_pose(previous_camera_pose,
-                                                           next_camera_pose,
+        triangulated_points = triangulate_points_from_pose(intrinsic_camera_matrix @ previous_camera_pose[:3],
+                                                           intrinsic_camera_matrix @ next_camera_pose[:3],
                                                            matching_previous_image_points_with_3d_position,
                                                            matching_next_image_points_with_3d_position)
-        distances_from_known = np.linalg.norm(matching_3d_points - triangulated_points, axis=1)
-        num_good_points = np.count_nonzero(distances_from_known < 1)
-        error = np.sum(distances_from_known)
-        if (num_good_points > winning_num_good_points) or (num_good_points == winning_num_good_points and error < winning_error):
+        print(triangulated_points)
+        rotation = util.pose_to_rotation(next_camera_pose)
+        translation = util.pose_to_translation(next_camera_pose)
+        camera_2_vector = rotation @ np.asarray([0, 0, 1])
+        points_in_front_of_camera_1 = triangulated_points[:, 2] > 0
+        points_in_front_of_camera_2 = np.dot((triangulated_points - translation), camera_2_vector) > 0
+        num_points_in_front_of_cameras = np.count_nonzero(np.multiply(points_in_front_of_camera_1, points_in_front_of_camera_2))
+        error = np.sum(np.linalg.norm(matching_3d_points - triangulated_points, axis=1))
+
+        if num_points_in_front_of_cameras > winning_num_good_points \
+                or (num_points_in_front_of_cameras == winning_num_good_points and winning_error > error):
             winning_pose = next_camera_pose
-            winning_num_good_points = num_good_points
+            winning_num_good_points = num_points_in_front_of_cameras
             winning_error = error
     logger.info("Pose from points, num good points: ", winning_num_good_points, "/", len(matching_3d_points))
     assert winning_pose.shape == (4, 4)

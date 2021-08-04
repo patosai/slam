@@ -243,16 +243,15 @@ class Slam:
                 matches_with_3d_points.append({"prev_point": prev_point,
                                                "new_point": new_point,
                                                "3d_point": point_3d})
-        relative_pose, relative_points = triangulation.triangulate_pose_from_points_with_ransac(latest_camera_pose,
-                                                                                                np.array([match["prev_point"] for match in matches_with_3d_points]),
-                                                                                                np.array([match["new_point"] for match in matches_with_3d_points]),
-                                                                                                np.array([match["3d_point"] for match in matches_with_3d_points]),
-                                                                                                prev_image_points,
-                                                                                                new_image_points,
-                                                                                                self.intrinsic_camera_matrix)
-        latest_pose = latest_camera_pose @ relative_pose
-        self.log_camera_pose(latest_pose)
-        self.add_camera_pose(latest_pose)
+        pose, points = triangulation.triangulate_pose_from_points_with_ransac(latest_camera_pose,
+                                                                              np.array([match["prev_point"] for match in matches_with_3d_points]),
+                                                                              np.array([match["new_point"] for match in matches_with_3d_points]),
+                                                                              np.array([match["3d_point"] for match in matches_with_3d_points]),
+                                                                              prev_image_points,
+                                                                              new_image_points,
+                                                                              self.intrinsic_camera_matrix)
+        self.log_camera_pose(pose)
+        self.add_camera_pose(pose)
 
 
 def main():
