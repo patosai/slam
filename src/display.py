@@ -1,6 +1,11 @@
 import sys
 sys.path.append("./lib")
-import pangolin
+if sys.platform == "darwin":
+    # currently has segfault issues on Big Sur
+    # import pypangolin as pangolin
+    pass
+else:
+    import pangolin
 import numpy as np
 import OpenGL.GL as gl
 from . import util

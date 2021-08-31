@@ -262,7 +262,7 @@ def main():
                                           [0.000000e+00, 0.000000e+00, 1.000000e+00]])
     slam = Slam(intrinsic_camera_matrix,
                 show_image_keypoints=True,
-                show_3d_visualization=True)
+                show_3d_visualization=False)
     img0 = cv2.imread("data/0000000000.png")
     img1 = cv2.imread("data/0000000002.png")
 
